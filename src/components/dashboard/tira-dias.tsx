@@ -4,7 +4,7 @@ import { formatearMes } from "@/lib/datos/calendario";
 import type { ResumenDia } from "@/lib/datos/metricas";
 import { cn } from "@/lib/utils";
 
-const FMT_DIA_CORTO = new Intl.DateTimeFormat("es-ES", { weekday: "narrow" });
+const FMT_DIA_CORTO = new Intl.DateTimeFormat("es-ES", { timeZone: "UTC", weekday: "narrow" });
 
 /** Tira de los últimos días, con el mismo código de color del calendario. */
 export function TiraDias({ dias }: { dias: ResumenDia[] }) {
@@ -12,7 +12,7 @@ export function TiraDias({ dias }: { dias: ResumenDia[] }) {
     <div className="flex gap-1.5 overflow-x-auto scrollbar-thin pb-1">
       {dias.map((dia) => {
         const tono = tonoDe(dia.neto);
-        const mes = formatearMes(dia.fecha.getFullYear(), dia.fecha.getMonth() + 1);
+        const mes = formatearMes(dia.fecha.getUTCFullYear(), dia.fecha.getUTCMonth() + 1);
 
         return (
           <Link
@@ -41,7 +41,7 @@ export function TiraDias({ dias }: { dias: ResumenDia[] }) {
               )}
             >
               {FMT_DIA_CORTO.format(dia.fecha)}
-              {dia.fecha.getDate()}
+              {dia.fecha.getUTCDate()}
             </span>
             <span
               className={cn(

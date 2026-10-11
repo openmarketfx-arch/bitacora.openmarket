@@ -1,10 +1,20 @@
-import { claveDiaLocal } from "@/lib/format";
+import {
+  claveDia,
+  claveHoy,
+  diaSemanaDeClave,
+  fechaDeClave,
+  finDeDia,
+  inicioDeDia,
+  partesDeClave,
+  sumarDias,
+} from "@/lib/zona";
 import { fechaDeCalendario } from "@/lib/datos/operaciones";
 import type { TradeCompleto } from "@/lib/types";
 
 export interface DiaCalendario {
-  /** YYYY-MM-DD en hora local. */
+  /** YYYY-MM-DD en la zona del usuario. */
   clave: string;
+  /** Mediodía UTC de ese día: léase con getUTC* o con timeZone "UTC". */
   fecha: Date;
   /** false para los días de relleno del mes anterior o siguiente. */
   delMes: boolean;
@@ -29,50 +39,55 @@ export interface MesCalendario {
   totales: { neto: number; operaciones: number; abiertas: number; pendientes: number };
 }
 
-const FMT_MES = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
+const FMT_MES = new Intl.DateTimeFormat("es-ES", {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
 
-/** Lunes de la semana a la que pertenece la fecha. */
-function lunesDe(fecha: Date): Date {
-  const d = new Date(fecha);
-  // getDay(): 0 = domingo. En España la semana empieza en lunes.
-  const desplazamiento = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - desplazamiento);
-  d.setHours(0, 0, 0, 0);
-  return d;
+/** Lunes de la semana a la que pertenece el día `clave`. */
+function lunesDe(clave: string): string {
+  // diaSemana: 0 = domingo. En España la semana empieza en lunes.
+  return sumarDias(clave, -((diaSemanaDeClave(clave) + 6) % 7));
 }
 
 /** Rejilla de 6 semanas para que el calendario no cambie de alto entre meses. */
-export function rangoRejilla(anio: number, mes: number): { inicio: Date; fin: Date } {
-  const inicio = lunesDe(new Date(anio, mes - 1, 1));
-  const fin = new Date(inicio);
-  fin.setDate(fin.getDate() + 41);
-  fin.setHours(23, 59, 59, 999);
-  return { inicio, fin };
+export function rangoRejilla(
+  anio: number,
+  mes: number,
+  zona: string,
+): { inicio: Date; fin: Date; claveInicio: string } {
+  const claveInicio = lunesDe(`${anio}-${String(mes).padStart(2, "0")}-01`);
+  return {
+    inicio: inicioDeDia(claveInicio, zona),
+    fin: finDeDia(sumarDias(claveInicio, 41), zona),
+    claveInicio,
+  };
 }
 
 export function construirMes(
   anio: number,
   mes: number,
   operaciones: TradeCompleto[],
+  zona: string,
 ): MesCalendario {
-  const { inicio, fin } = rangoRejilla(anio, mes);
+  const { inicio, fin, claveInicio } = rangoRejilla(anio, mes, zona);
 
   const porDia = new Map<string, TradeCompleto[]>();
   for (const op of operaciones) {
-    const clave = claveDiaLocal(fechaDeCalendario(op));
+    const clave = claveDia(fechaDeCalendario(op), zona);
     const lista = porDia.get(clave);
     if (lista) lista.push(op);
     else porDia.set(clave, [op]);
   }
 
-  const hoy = claveDiaLocal(new Date());
+  const hoy = claveHoy(zona);
   const dias: DiaCalendario[] = [];
   const totales = { neto: 0, operaciones: 0, abiertas: 0, pendientes: 0 };
 
   for (let i = 0; i < 42; i++) {
-    const fecha = new Date(inicio);
-    fecha.setDate(fecha.getDate() + i);
-    const clave = claveDiaLocal(fecha);
+    const clave = sumarDias(claveInicio, i);
+    const fecha = fechaDeClave(clave);
     const delDia = porDia.get(clave) ?? [];
 
     const cerradas = delDia.filter((o) => o.estado_operacion === "cerrada");
@@ -85,7 +100,8 @@ export function construirMes(
       ? cerradas.reduce((suma, o) => suma + Number(o.resultado_dinero ?? 0), 0)
       : null;
 
-    const delMes = fecha.getMonth() === mes - 1 && fecha.getFullYear() === anio;
+    const partes = partesDeClave(clave);
+    const delMes = partes.mes === mes && partes.anio === anio;
 
     if (delMes) {
       totales.neto += neto ?? 0;
@@ -107,7 +123,7 @@ export function construirMes(
     });
   }
 
-  const etiqueta = FMT_MES.format(new Date(anio, mes - 1, 1));
+  const etiqueta = FMT_MES.format(fechaDeClave(`${anio}-${String(mes).padStart(2, "0")}-01`));
 
   return {
     anio,
@@ -120,19 +136,21 @@ export function construirMes(
   };
 }
 
-/** "2026-09" -> {anio, mes}. Cae al mes actual si el valor no sirve. */
-export function parsearMes(valor: string | undefined): { anio: number; mes: number } {
-  const hoy = new Date();
-  if (!valor) return { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
+/** "2026-09" -> {anio, mes}. Cae al mes actual (en la zona del usuario) si el valor no sirve. */
+export function parsearMes(
+  valor: string | undefined,
+  zona: string,
+): { anio: number; mes: number } {
+  const hoy = partesDeClave(claveHoy(zona));
+  const actual = { anio: hoy.anio, mes: hoy.mes };
+  if (!valor) return actual;
 
   const coincidencia = /^(\d{4})-(\d{2})$/.exec(valor);
-  if (!coincidencia) return { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
+  if (!coincidencia) return actual;
 
   const anio = Number(coincidencia[1]);
   const mes = Number(coincidencia[2]);
-  if (mes < 1 || mes > 12 || anio < 2000 || anio > 2100) {
-    return { anio: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
-  }
+  if (mes < 1 || mes > 12 || anio < 2000 || anio > 2100) return actual;
   return { anio, mes };
 }
 
@@ -141,6 +159,6 @@ export function formatearMes(anio: number, mes: number): string {
 }
 
 export function mesVecino(anio: number, mes: number, delta: number): string {
-  const d = new Date(anio, mes - 1 + delta, 1);
-  return formatearMes(d.getFullYear(), d.getMonth() + 1);
+  const d = new Date(Date.UTC(anio, mes - 1 + delta, 1));
+  return formatearMes(d.getUTCFullYear(), d.getUTCMonth() + 1);
 }

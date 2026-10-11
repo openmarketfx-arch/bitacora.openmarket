@@ -104,46 +104,35 @@ export function tonoDe(monto: number | null | undefined): Tono {
 }
 
 // ---------- Fechas ----------
+// Todo formato de fecha lleva la zona del usuario de forma explícita: el servidor
+// corre en UTC y, sin ella, mostraría (y agruparía) las horas en la zona equivocada.
 
-const TZ_FMT_FECHA = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
+const formatos = new Map<string, Intl.DateTimeFormat>();
 
-const TZ_FMT_FECHA_HORA = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+function formato(zona: string, clave: "fecha" | "fechaHora"): Intl.DateTimeFormat {
+  const id = `${clave}|${zona}`;
+  let f = formatos.get(id);
+  if (!f) {
+    f = new Intl.DateTimeFormat("es-ES", {
+      timeZone: zona,
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      ...(clave === "fechaHora" ? { hour: "2-digit", minute: "2-digit" } : {}),
+    });
+    formatos.set(id, f);
+  }
+  return f;
+}
 
-export function formatFecha(iso: string | null | undefined): string {
+export function formatFecha(iso: string | null | undefined, zona: string): string {
   if (!iso) return "—";
-  return TZ_FMT_FECHA.format(new Date(iso));
+  return formato(zona, "fecha").format(new Date(iso));
 }
 
-export function formatFechaHora(iso: string | null | undefined): string {
+export function formatFechaHora(iso: string | null | undefined, zona: string): string {
   if (!iso) return "—";
-  return TZ_FMT_FECHA_HORA.format(new Date(iso));
-}
-
-/** Clave YYYY-MM-DD en hora local, para agrupar por día del calendario. */
-export function claveDiaLocal(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
-}
-
-/** Valor para <input type="datetime-local"> a partir de un ISO o de ahora. */
-export function paraInputDateTime(iso?: string | null): string {
-  const d = iso ? new Date(iso) : new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(
-    d.getMinutes(),
-  )}`;
+  return formato(zona, "fechaHora").format(new Date(iso));
 }
 
 /**

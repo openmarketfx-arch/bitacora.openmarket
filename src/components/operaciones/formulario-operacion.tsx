@@ -27,7 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { paraInputDateTime } from "@/lib/format";
+import { useZona } from "@/components/layout/proveedor-zona";
+import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
   TIPO_ORDEN_MAP,
   esOrdenPendiente,
@@ -45,13 +46,14 @@ interface Props {
 }
 
 export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Props) {
+  const zona = useZona();
   const router = useRouter();
 
   // ---- Entrada ----
   const [cuentaId, setCuentaId] = useState(cuentas[0]?.id ?? "");
   const [instrumentoId, setInstrumentoId] = useState<string | null>(null);
   const [tipoOrden, setTipoOrden] = useState<TipoOrden>("buy");
-  const [fechaEntrada, setFechaEntrada] = useState(paraInputDateTime());
+  const [fechaEntrada, setFechaEntrada] = useState(() => paraInputDateTime(zona));
   const [precioEntrada, setPrecioEntrada] = useState("");
   const [precioTp, setPrecioTp] = useState("");
   const [precioStop, setPrecioStop] = useState("");
@@ -89,7 +91,7 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
 
   function abrirCierre() {
     setCerrando(true);
-    if (!fechaSalida) setFechaSalida(paraInputDateTime());
+    if (!fechaSalida) setFechaSalida(paraInputDateTime(zona));
   }
 
   function cancelarCierre() {
@@ -119,7 +121,7 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
       trading_account_id: cuentaId,
       instrument_id: instrumentoId,
       tipo_orden: tipoOrden,
-      fecha_hora_entrada: fechaEntrada,
+      fecha_hora_entrada: deInputDateTime(fechaEntrada, zona),
       precio_entrada: precioEntrada,
       precio_tp: precioTp === "" ? null : precioTp,
       precio_stop: precioStop === "" ? null : precioStop,
@@ -129,7 +131,7 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
       tags: tagsElegidos,
 
       desenlace,
-      fecha_hora_salida: conSalida ? fechaSalida : "",
+      fecha_hora_salida: conSalida ? deInputDateTime(fechaSalida, zona) : "",
       precio_salida: conSalida && precioSalida !== "" ? precioSalida : null,
       resultado_dinero: conSalida && resultado !== "" ? resultado : null,
       tipo_cierre: conSalida ? tipoCierre : null,

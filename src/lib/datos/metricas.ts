@@ -1,4 +1,11 @@
-import { claveDiaLocal } from "@/lib/format";
+import {
+  claveDia,
+  claveHoy,
+  fechaDeClave,
+  inicioDeDia,
+  partesDeClave,
+  sumarDias,
+} from "@/lib/zona";
 import type { TradeCompleto } from "@/lib/types";
 
 export type Periodo = "7d" | "30d" | "90d" | "anio" | "todo";
@@ -16,21 +23,18 @@ export function parsearPeriodo(valor: string | undefined): Periodo {
   return valido ? (valor as Periodo) : "30d";
 }
 
-/** Fecha desde la que cuenta el periodo. null = sin límite. */
-export function inicioDePeriodo(periodo: Periodo): Date | null {
-  const ahora = new Date();
+/** Instante desde el que cuenta el periodo, en la zona del usuario. null = sin límite. */
+export function inicioDePeriodo(periodo: Periodo, zona: string): Date | null {
+  const hoy = claveHoy(zona);
   switch (periodo) {
     case "7d":
     case "30d":
     case "90d": {
       const dias = periodo === "7d" ? 7 : periodo === "30d" ? 30 : 90;
-      const d = new Date(ahora);
-      d.setDate(d.getDate() - (dias - 1));
-      d.setHours(0, 0, 0, 0);
-      return d;
+      return inicioDeDia(sumarDias(hoy, -(dias - 1)), zona);
     }
     case "anio":
-      return new Date(ahora.getFullYear(), 0, 1);
+      return inicioDeDia(`${partesDeClave(hoy).anio}-01-01`, zona);
     case "todo":
       return null;
   }
@@ -69,19 +73,24 @@ export interface PuntoEquity {
 
 export interface ResumenDia {
   clave: string;
+  /** Mediodía UTC de ese día de calendario: léase con getUTC* o timeZone "UTC". */
   fecha: Date;
   neto: number | null;
   operaciones: number;
 }
 
-const FMT_EJE = new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short" });
+const FMT_EJE = new Intl.DateTimeFormat("es-ES", {
+  timeZone: "UTC",
+  day: "2-digit",
+  month: "short",
+});
 
 /** Agrupa las cerradas por día de salida y acumula el resultado. */
-export function construirEquity(cerradas: TradeCompleto[]): PuntoEquity[] {
+export function construirEquity(cerradas: TradeCompleto[], zona: string): PuntoEquity[] {
   const porDia = new Map<string, number>();
 
   for (const op of cerradas) {
-    const clave = claveDiaLocal(op.fecha_hora_salida ?? op.fecha_hora_entrada);
+    const clave = claveDia(op.fecha_hora_salida ?? op.fecha_hora_entrada, zona);
     porDia.set(clave, (porDia.get(clave) ?? 0) + Number(op.resultado_dinero ?? 0));
   }
 
@@ -90,8 +99,7 @@ export function construirEquity(cerradas: TradeCompleto[]): PuntoEquity[] {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([clave, neto]) => {
       acumulado += neto;
-      // Mediodía para que el desfase horario no mueva el día en el eje.
-      const fecha = new Date(`${clave}T12:00:00`);
+      const fecha = fechaDeClave(clave);
       return { clave, etiqueta: FMT_EJE.format(fecha), neto, acumulado };
     });
 }
@@ -157,28 +165,30 @@ export function calcularKpis(
   };
 }
 
-/** Los últimos N días naturales, con su neto, para la tira del dashboard. */
-export function ultimosDias(cerradas: TradeCompleto[], cantidad = 14): ResumenDia[] {
+/** Los últimos N días naturales (en la zona del usuario), con su neto, para la tira del dashboard. */
+export function ultimosDias(
+  cerradas: TradeCompleto[],
+  cantidad: number,
+  zona: string,
+): ResumenDia[] {
   const porDia = new Map<string, { neto: number; operaciones: number }>();
 
   for (const op of cerradas) {
-    const clave = claveDiaLocal(op.fecha_hora_salida ?? op.fecha_hora_entrada);
+    const clave = claveDia(op.fecha_hora_salida ?? op.fecha_hora_entrada, zona);
     const actual = porDia.get(clave) ?? { neto: 0, operaciones: 0 };
     actual.neto += Number(op.resultado_dinero ?? 0);
     actual.operaciones += 1;
     porDia.set(clave, actual);
   }
 
+  const hoy = claveHoy(zona);
   const dias: ResumenDia[] = [];
   for (let i = cantidad - 1; i >= 0; i--) {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - i);
-    fecha.setHours(0, 0, 0, 0);
-    const clave = claveDiaLocal(fecha);
+    const clave = sumarDias(hoy, -i);
     const datos = porDia.get(clave);
     dias.push({
       clave,
-      fecha,
+      fecha: fechaDeClave(clave),
       neto: datos ? datos.neto : null,
       operaciones: datos?.operaciones ?? 0,
     });

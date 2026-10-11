@@ -16,9 +16,12 @@ import { cn } from "@/lib/utils";
 
 export function TablaOperaciones({
   operaciones,
+  zona,
   vacio = "Todavía no hay operaciones.",
 }: {
   operaciones: TradeCompleto[];
+  /** Zona horaria del usuario, para mostrar las horas. */
+  zona: string;
   vacio?: string;
 }) {
   if (operaciones.length === 0) {
@@ -63,7 +66,7 @@ export function TablaOperaciones({
               </TableCell>
 
               <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                {formatFechaHora(op.fecha_hora_entrada)}
+                {formatFechaHora(op.fecha_hora_entrada, zona)}
               </TableCell>
 
               <TableCell>

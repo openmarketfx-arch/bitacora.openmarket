@@ -19,6 +19,7 @@ import {
   formatUnidades,
 } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { obtenerZona } from "@/lib/zona-servidor";
 import {
   CATEGORIA_TAG_MAP,
   SUBTIPO_SALIDA_LABEL,
@@ -32,6 +33,7 @@ export const metadata = { title: "Operación — Open Market" };
 
 export default async function OperacionPage({ params }: { params: Promise<{ id: string }> }) {
   await requerirUsuario();
+  const zona = await obtenerZona();
 
   const op = await obtenerOperacion((await params).id);
   if (!op) notFound();
@@ -64,7 +66,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
     <>
       <Topbar
         titulo={`${op.instrument.simbolo} · ${TIPO_ORDEN_MAP[op.tipo_orden].etiqueta}`}
-        descripcion={`${op.account.nombre} · ${formatFechaHora(op.fecha_hora_entrada)}`}
+        descripcion={`${op.account.nombre} · ${formatFechaHora(op.fecha_hora_entrada, zona)}`}
         acciones={
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
@@ -104,7 +106,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
               <CardTitle className="text-sm">Entrada</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <Dato etiqueta="Fecha y hora" valor={formatFechaHora(op.fecha_hora_entrada)} />
+              <Dato etiqueta="Fecha y hora" valor={formatFechaHora(op.fecha_hora_entrada, zona)} />
               <Dato
                 etiqueta="Precio"
                 valor={formatPrecio(op.precio_entrada, op.instrument.decimales_precio)}
@@ -169,7 +171,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
                 </>
               ) : (
                 <>
-                  <Dato etiqueta="Fecha y hora" valor={formatFechaHora(op.fecha_hora_salida)} />
+                  <Dato etiqueta="Fecha y hora" valor={formatFechaHora(op.fecha_hora_salida, zona)} />
                   <Dato
                     etiqueta="Precio"
                     valor={formatPrecio(op.precio_salida, op.instrument.decimales_precio)}

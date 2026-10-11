@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerZona } from "@/lib/zona-servidor";
 import {
   filtrarOperaciones,
   instrumentosUsados,
@@ -23,10 +24,11 @@ export default async function OperacionesPage({
 }) {
   await requerirUsuario();
   const params = await searchParams;
+  const zona = await obtenerZona();
 
   // Una sola lectura: las colas y los filtros se resuelven en memoria, que sale
   // más barato que un viaje a la base por cada combinación.
-  const filtro = parsearFiltro(params, "todo");
+  const filtro = parsearFiltro(params, "todo", zona);
   const sinFiltrar = await listarOperaciones({ limite: 500 });
   const todas = filtrarOperaciones(sinFiltrar, filtro);
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta");

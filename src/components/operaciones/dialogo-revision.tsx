@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useZona } from "@/components/layout/proveedor-zona";
 import { formatFechaHora, formatPrecio } from "@/lib/format";
 import {
   TIPO_CIERRE_MAP,
@@ -31,6 +32,7 @@ interface Props {
 
 export function DialogoRevision({ operacion, onOpenChange }: Props) {
   const router = useRouter();
+  const zona = useZona();
 
   const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(
     operacion?.tipo_cierre ?? null,
@@ -82,7 +84,7 @@ export function DialogoRevision({ operacion, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-background/40 p-4 text-sm sm:grid-cols-4">
-          <Resumen etiqueta="Entrada" valor={formatFechaHora(operacion.fecha_hora_entrada)} />
+          <Resumen etiqueta="Entrada" valor={formatFechaHora(operacion.fecha_hora_entrada, zona)} />
           <Resumen
             etiqueta="Precios"
             valor={`${formatPrecio(
@@ -90,7 +92,7 @@ export function DialogoRevision({ operacion, onOpenChange }: Props) {
               operacion.instrument.decimales_precio,
             )} → ${formatPrecio(operacion.precio_salida, operacion.instrument.decimales_precio)}`}
           />
-          <Resumen etiqueta="Salida" valor={formatFechaHora(operacion.fecha_hora_salida)} />
+          <Resumen etiqueta="Salida" valor={formatFechaHora(operacion.fecha_hora_salida, zona)} />
           <div className="space-y-1">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
               Resultado

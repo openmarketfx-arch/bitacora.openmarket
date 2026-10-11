@@ -63,12 +63,12 @@ function Celda({ dia, onAbrir }: { dia: DiaCalendario; onAbrir: () => void }) {
       disabled={!tieneAlgo}
       aria-label={
         tieneAlgo
-          ? `${dia.fecha.getDate()}: ${plural(
+          ? `${dia.fecha.getUTCDate()}: ${plural(
               dia.operaciones.length,
               "operación",
               "operaciones",
             )}${dia.neto !== null ? `, neto ${formatDinero(dia.neto)}` : ""}`
-          : `${dia.fecha.getDate()}, sin operaciones`
+          : `${dia.fecha.getUTCDate()}, sin operaciones`
       }
       className={cn(
         "relative flex min-h-[92px] flex-col gap-1 border-b border-r border-border/70 p-2 text-left transition-colors",
@@ -86,7 +86,7 @@ function Celda({ dia, onAbrir }: { dia: DiaCalendario; onAbrir: () => void }) {
             tono === "negativo" && !dia.esHoy && "text-negative-foreground/70",
           )}
         >
-          {dia.fecha.getDate()}
+          {dia.fecha.getUTCDate()}
         </span>
 
         <div className="flex items-center gap-1">

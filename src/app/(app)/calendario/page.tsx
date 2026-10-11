@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerZona } from "@/lib/zona-servidor";
+import { claveHoy, partesDeClave } from "@/lib/zona";
 import { filtrarPorInstrumento, instrumentosUsados } from "@/lib/datos/filtros";
 import {
   construirMes,
@@ -27,9 +29,10 @@ export default async function CalendarioPage({
 }) {
   await requerirUsuario();
   const params = await searchParams;
+  const zona = await obtenerZona();
 
-  const { anio, mes } = parsearMes(params.mes);
-  const { inicio, fin } = rangoRejilla(anio, mes);
+  const { anio, mes } = parsearMes(params.mes, zona);
+  const { inicio, fin } = rangoRejilla(anio, mes, zona);
 
   const delMes = await listarParaCalendario(inicio, fin);
   const instrumento = params.instrumento?.trim() || null;
@@ -38,10 +41,10 @@ export default async function CalendarioPage({
   ).sort();
   const operaciones = filtrarPorInstrumento(delMes, instrumento);
   const consultaInstrumento = instrumento ? `&instrumento=${encodeURIComponent(instrumento)}` : "";
-  const datos = construirMes(anio, mes, operaciones);
+  const datos = construirMes(anio, mes, operaciones, zona);
 
-  const hoy = new Date();
-  const esMesActual = anio === hoy.getFullYear() && mes === hoy.getMonth() + 1;
+  const hoy = partesDeClave(claveHoy(zona));
+  const esMesActual = anio === hoy.anio && mes === hoy.mes;
 
   return (
     <>
@@ -56,7 +59,7 @@ export default async function CalendarioPage({
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild disabled={esMesActual}>
-              <Link href={`/calendario?mes=${formatearMes(hoy.getFullYear(), hoy.getMonth() + 1)}${consultaInstrumento}`}>
+              <Link href={`/calendario?mes=${formatearMes(hoy.anio, hoy.mes)}${consultaInstrumento}`}>
                 Hoy
               </Link>
             </Button>

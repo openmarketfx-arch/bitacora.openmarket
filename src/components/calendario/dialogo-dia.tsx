@@ -12,19 +12,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useZona } from "@/components/layout/proveedor-zona";
 import { formatPrecio, plural } from "@/lib/format";
 import type { DiaCalendario } from "@/lib/datos/calendario";
 import { TIPO_CIERRE_MAP } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const FMT_DIA = new Intl.DateTimeFormat("es-ES", {
+  timeZone: "UTC",
   weekday: "long",
   day: "numeric",
   month: "long",
   year: "numeric",
 });
 
-const FMT_HORA = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" });
+const formatosHora = new Map<string, Intl.DateTimeFormat>();
+
+function formatoHora(zona: string): Intl.DateTimeFormat {
+  let f = formatosHora.get(zona);
+  if (!f) {
+    f = new Intl.DateTimeFormat("es-ES", { timeZone: zona, hour: "2-digit", minute: "2-digit" });
+    formatosHora.set(zona, f);
+  }
+  return f;
+}
 
 export function DialogoDia({
   dia,
@@ -33,6 +44,7 @@ export function DialogoDia({
   dia: DiaCalendario;
   onOpenChange: (abierto: boolean) => void;
 }) {
+  const zona = useZona();
   const titulo = FMT_DIA.format(dia.fecha);
 
   return (
@@ -70,7 +82,7 @@ export function DialogoDia({
                 className="flex items-center gap-3 rounded-md border border-border bg-background/40 p-3 transition-colors hover:border-primary/40 hover:bg-accent/40"
               >
                 <span className="tabular w-11 shrink-0 font-mono text-[11px] text-muted-foreground">
-                  {FMT_HORA.format(new Date(hora))}
+                  {formatoHora(zona).format(new Date(hora))}
                 </span>
 
                 <span className="w-[74px] shrink-0 font-mono text-xs font-medium">

@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerZona } from "@/lib/zona-servidor";
 import {
   filtrarOperaciones,
   instrumentosUsados,
@@ -54,8 +55,9 @@ export default async function AnaliticaPage({
 }) {
   await requerirUsuario();
   const params = await searchParams;
+  const zona = await obtenerZona();
 
-  const filtro = parsearFiltro(params, "todo");
+  const filtro = parsearFiltro(params, "todo", zona);
   const todasSinFiltrar = await listarOperaciones({ limite: 2000 });
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarOperaciones(todasSinFiltrar, filtro);
@@ -95,8 +97,8 @@ export default async function AnaliticaPage({
   const cruce = cruzarTagYCierre(clasificadas);
   const disciplina = analizarDisciplina(clasificadas);
   const rachas = calcularRachas(cerradas);
-  const porDia = analizarPorDiaSemana(cerradas);
-  const porHora = analizarPorHora(cerradas);
+  const porDia = analizarPorDiaSemana(cerradas, zona);
+  const porHora = analizarPorHora(cerradas, zona);
   const hallazgo = peorLectura(cruce);
 
   const moneda = cerradas[0]?.account.moneda_base ?? "USD";

@@ -1,15 +1,20 @@
 import { ChartCandlestick } from "lucide-react";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
+import { FijarZona, ProveedorZona } from "@/components/layout/proveedor-zona";
 import { Sidebar } from "@/components/layout/sidebar";
 import { requerirUsuario } from "@/lib/auth";
 import { contarPorEstado } from "@/lib/datos/operaciones";
+import { obtenerZona } from "@/lib/zona-servidor";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const usuario = await requerirUsuario();
   const email = usuario.email ?? "";
   const { pendientes } = await contarPorEstado();
+  const zona = await obtenerZona();
 
   return (
+    <ProveedorZona zona={zona}>
+    <FijarZona />
     <div className="min-h-screen">
       <Sidebar email={email} pendientes={pendientes} />
 
@@ -26,5 +31,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <div className="lg:pl-60">{children}</div>
     </div>
+    </ProveedorZona>
   );
 }

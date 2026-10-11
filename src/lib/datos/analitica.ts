@@ -1,4 +1,5 @@
 import { aUnidades, pipsEntre, unidadDe, type UnidadMedida } from "@/lib/format";
+import { partesEnZona } from "@/lib/zona";
 import {
   TIPOS_CIERRE,
   TIPOS_ORDEN,
@@ -269,12 +270,11 @@ export interface FilaTiempo extends Rendimiento {
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
 /** Rendimiento por día de la semana, según la fecha de salida. */
-export function analizarPorDiaSemana(cerradas: TradeCompleto[]): FilaTiempo[] {
+export function analizarPorDiaSemana(cerradas: TradeCompleto[], zona: string): FilaTiempo[] {
   const grupos = new Map<number, TradeCompleto[]>();
 
   for (const op of cerradas) {
-    const fecha = new Date(op.fecha_hora_salida ?? op.fecha_hora_entrada);
-    const dia = fecha.getDay();
+    const dia = partesEnZona(op.fecha_hora_salida ?? op.fecha_hora_entrada, zona).diaSemana;
     const lista = grupos.get(dia);
     if (lista) lista.push(op);
     else grupos.set(dia, [op]);
@@ -292,11 +292,11 @@ export function analizarPorDiaSemana(cerradas: TradeCompleto[]): FilaTiempo[] {
 }
 
 /** Rendimiento por hora de entrada: es la hora en que decides operar. */
-export function analizarPorHora(cerradas: TradeCompleto[]): FilaTiempo[] {
+export function analizarPorHora(cerradas: TradeCompleto[], zona: string): FilaTiempo[] {
   const grupos = new Map<number, TradeCompleto[]>();
 
   for (const op of cerradas) {
-    const hora = new Date(op.fecha_hora_entrada).getHours();
+    const hora = partesEnZona(op.fecha_hora_entrada, zona).hora;
     const lista = grupos.get(hora);
     if (lista) lista.push(op);
     else grupos.set(hora, [op]);

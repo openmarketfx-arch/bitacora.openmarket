@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatFechaHora, formatPrecio, paraInputDateTime } from "@/lib/format";
+import { useZona } from "@/components/layout/proveedor-zona";
+import { formatFechaHora, formatPrecio } from "@/lib/format";
+import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import { esOrdenPendiente, TIPO_ORDEN_MAP, type TipoCierre, type TradeCompleto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +32,9 @@ interface Props {
 
 export function DialogoCierre({ operacion, onOpenChange }: Props) {
   const router = useRouter();
+  const zona = useZona();
 
-  const [fechaSalida, setFechaSalida] = useState(paraInputDateTime());
+  const [fechaSalida, setFechaSalida] = useState(() => paraInputDateTime(zona));
   const [precioSalida, setPrecioSalida] = useState("");
   const [resultado, setResultado] = useState("");
   const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(null);
@@ -56,7 +59,7 @@ export function DialogoCierre({ operacion, onOpenChange }: Props) {
     setGuardando(true);
     const r = await cerrarOperacion(operacion.id, {
       activada: esOrdenPendiente(operacion.tipo_orden) ? seActivo : null,
-      fecha_hora_salida: noActivada ? "" : fechaSalida,
+      fecha_hora_salida: noActivada ? "" : deInputDateTime(fechaSalida, zona),
       precio_salida: noActivada ? null : precioSalida,
       resultado_dinero: noActivada ? null : resultado,
       tipo_cierre: noActivada ? null : tipoCierre,
@@ -91,7 +94,7 @@ export function DialogoCierre({ operacion, onOpenChange }: Props) {
           </DialogTitle>
           <DialogDescription>
             {pendiente ? "Orden puesta" : "Abierta"} el{" "}
-            {formatFechaHora(operacion.fecha_hora_entrada)} en{" "}
+            {formatFechaHora(operacion.fecha_hora_entrada, zona)} en{" "}
             {formatPrecio(operacion.precio_entrada, operacion.instrument.decimales_precio)}.
           </DialogDescription>
         </DialogHeader>

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
 import { aPrecio } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { deInputDateTime } from "@/lib/zona";
+import { obtenerZona } from "@/lib/zona-servidor";
 import {
   TIPO_CIERRE_MAP,
   esOrdenPendiente,
@@ -15,6 +17,22 @@ import {
   type TipoOrden,
 } from "@/lib/types";
 import type { Resultado } from "@/app/(app)/configuracion/acciones";
+
+/**
+ * El navegador manda las fechas ya en ISO (con zona). Si llegara alguna sin zona,
+ * como el valor crudo de un datetime-local, se lee en la zona del usuario y no en
+ * la del servidor, que en Cloudflare es UTC y desplazaría la hora varias horas.
+ */
+async function conFechasEnZona(datos: unknown): Promise<unknown> {
+  if (typeof datos !== "object" || datos === null) return datos;
+  const zona = await obtenerZona();
+  const copia = { ...(datos as Record<string, unknown>) };
+  for (const campo of ["fecha_hora_entrada", "fecha_hora_salida"]) {
+    const valor = copia[campo];
+    if (typeof valor === "string" && valor) copia[campo] = deInputDateTime(valor, zona);
+  }
+  return copia;
+}
 
 export interface ResultadoOperacion extends Resultado {
   id?: string;
@@ -133,7 +151,7 @@ function columnasDeMedicion(
 }
 
 export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion> {
-  const parseado = esquemaOperacion.safeParse(datos);
+  const parseado = esquemaOperacion.safeParse(await conFechasEnZona(datos));
   if (!parseado.success) {
     return { ok: false, mensaje: parseado.error.issues[0]?.message ?? "Datos inválidos." };
   }
@@ -309,7 +327,7 @@ const esquemaCierre = z
  *    sobre la precisión de la entrada.
  */
 export async function cerrarOperacion(id: string, datos: unknown): Promise<Resultado> {
-  const parseado = esquemaCierre.safeParse(datos);
+  const parseado = esquemaCierre.safeParse(await conFechasEnZona(datos));
   if (!parseado.success) {
     return { ok: false, mensaje: parseado.error.issues[0]?.message ?? "Datos inválidos." };
   }

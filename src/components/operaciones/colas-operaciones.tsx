@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ClipboardCheck, Clock } from "lucide-react";
+import { useZona } from "@/components/layout/proveedor-zona";
 import { DialogoCierre } from "@/components/operaciones/dialogo-cierre";
 import { DialogoRevision } from "@/components/operaciones/dialogo-revision";
 import { EtiquetaTipoOrden } from "@/components/operaciones/selector-tipo-orden";
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
+  const zona = useZona();
   const [cerrando, setCerrando] = useState<TradeCompleto | null>(null);
   const [revisando, setRevisando] = useState<TradeCompleto | null>(null);
 
@@ -54,7 +56,7 @@ export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
         <TabsContent value="todas">
           <Card>
             <CardContent className="pt-5">
-              <TablaOperaciones operaciones={todas} />
+              <TablaOperaciones operaciones={todas} zona={zona} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -109,6 +111,7 @@ function Cola({
   etiquetaAccion: string;
   onAccion: (op: TradeCompleto) => void;
 }) {
+  const zona = useZona();
   if (operaciones.length === 0) {
     return (
       <Card>
@@ -154,7 +157,7 @@ function Cola({
                 {formatPrecio(op.precio_entrada, op.instrument.decimales_precio)}
               </div>
               <div className="text-[11px] text-muted-foreground">
-                {formatFechaHora(op.fecha_hora_entrada)}
+                {formatFechaHora(op.fecha_hora_entrada, zona)}
               </div>
             </div>
 
@@ -167,7 +170,7 @@ function Cola({
                   {formatPrecio(op.precio_salida, op.instrument.decimales_precio)}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
-                  {formatFechaHora(op.fecha_hora_salida)}
+                  {formatFechaHora(op.fecha_hora_salida, zona)}
                 </div>
               </div>
             )}

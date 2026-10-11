@@ -9,6 +9,7 @@ import { TablaOperaciones } from "@/components/operaciones/tabla-operaciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerZona } from "@/lib/zona-servidor";
 import { listarOperaciones } from "@/lib/datos/operaciones";
 import { calcularKpis, construirEquity, ultimosDias } from "@/lib/datos/metricas";
 import {
@@ -29,8 +30,9 @@ export default async function DashboardPage({
 }) {
   await requerirUsuario();
   const params = await searchParams;
+  const zona = await obtenerZona();
 
-  const filtro = parsearFiltro(params, "30d");
+  const filtro = parsearFiltro(params, "30d", zona);
 
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
@@ -42,14 +44,14 @@ export default async function DashboardPage({
   const enPeriodo = filtrarOperaciones(todasSinFiltrar, filtro);
 
   const cerradasPeriodo = enPeriodo.filter((o) => o.estado_operacion === "cerrada");
-  const equity = construirEquity(cerradasPeriodo);
+  const equity = construirEquity(cerradasPeriodo, zona);
   const kpis = calcularKpis(enPeriodo, equity);
 
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta").length;
   const pendientes = todas.filter((o) => o.estado_revision === "pendiente").length;
 
   const cerradasTodas = todas.filter((o) => o.estado_operacion === "cerrada");
-  const dias = ultimosDias(cerradasTodas, 14);
+  const dias = ultimosDias(cerradasTodas, 14, zona);
 
   const moneda = kpis.monedas[0] ?? "USD";
   const etiquetaPeriodo = filtro.etiquetaRango;
@@ -243,7 +245,7 @@ export default async function DashboardPage({
             </div>
           </CardHeader>
           <CardContent>
-            <TablaOperaciones operaciones={todas.slice(0, 8)} />
+            <TablaOperaciones operaciones={todas.slice(0, 8)} zona={zona} />
           </CardContent>
         </Card>
       </main>

@@ -4,6 +4,7 @@ import {
   type Periodo,
 } from "@/lib/datos/metricas";
 import type { TradeCompleto } from "@/lib/types";
+import { fechaDeClave, finDeDia, inicioDeDia } from "@/lib/zona";
 
 /** Parámetros de URL que entienden dashboard, analítica y calendario. */
 export interface ParametrosFiltro {
@@ -26,32 +27,45 @@ export interface FiltroReporte {
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-function parsearDia(valor: string | undefined, finDeDia: boolean): Date | null {
+/** El valor es una fecha YYYY-MM-DD que existe en el calendario (no un 31 de febrero). */
+function claveValida(valor: string | undefined): string | null {
   if (!valor || !FECHA.test(valor)) return null;
   const [a, m, d] = valor.split("-").map(Number);
-  const fecha = finDeDia ? new Date(a, m - 1, d, 23, 59, 59, 999) : new Date(a, m - 1, d);
-  // Rechaza fechas imposibles (31 de febrero) que Date desplaza en silencio.
-  return fecha.getMonth() === m - 1 ? fecha : null;
+  const real = new Date(Date.UTC(a, m - 1, d));
+  return real.getUTCMonth() === m - 1 && real.getUTCDate() === d ? valor : null;
 }
 
-const FMT = new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+const FMT = new Intl.DateTimeFormat("es-ES", {
+  timeZone: "UTC",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
 export function parsearFiltro(
   params: ParametrosFiltro,
   periodoPorDefecto: Periodo,
+  zona: string,
 ): FiltroReporte {
   const instrumento = params.instrumento?.trim() || null;
-  const desdePersonal = parsearDia(params.desde, false);
-  const hastaPersonal = parsearDia(params.hasta, true);
+  const claveDesde = claveValida(params.desde);
+  const claveHasta = claveValida(params.hasta);
 
-  if (desdePersonal || hastaPersonal) {
+  if (claveDesde || claveHasta) {
+    const etiqueta = (clave: string) => FMT.format(fechaDeClave(clave));
     const etiquetaRango =
-      desdePersonal && hastaPersonal
-        ? `del ${FMT.format(desdePersonal)} al ${FMT.format(hastaPersonal)}`
-        : desdePersonal
-          ? `desde el ${FMT.format(desdePersonal)}`
-          : `hasta el ${FMT.format(hastaPersonal!)}`;
-    return { periodo: null, desde: desdePersonal, hasta: hastaPersonal, instrumento, etiquetaRango };
+      claveDesde && claveHasta
+        ? `del ${etiqueta(claveDesde)} al ${etiqueta(claveHasta)}`
+        : claveDesde
+          ? `desde el ${etiqueta(claveDesde)}`
+          : `hasta el ${etiqueta(claveHasta!)}`;
+    return {
+      periodo: null,
+      desde: claveDesde ? inicioDeDia(claveDesde, zona) : null,
+      hasta: claveHasta ? finDeDia(claveHasta, zona) : null,
+      instrumento,
+      etiquetaRango,
+    };
   }
 
   const periodo = PERIODOS.some((p) => p.valor === params.periodo)
@@ -60,7 +74,7 @@ export function parsearFiltro(
 
   return {
     periodo,
-    desde: inicioDePeriodo(periodo),
+    desde: inicioDePeriodo(periodo, zona),
     hasta: null,
     instrumento,
     etiquetaRango: PERIODOS.find((p) => p.valor === periodo)!.etiqueta.toLowerCase(),
