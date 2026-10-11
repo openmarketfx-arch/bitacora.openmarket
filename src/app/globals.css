@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Open Market es dark-first: el tema oscuro no es opcional en el MVP. */
+    --background: 225 14% 5%;
+    --foreground: 210 20% 96%;
+
+    --card: 225 13% 8%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 225 14% 7%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 142 71% 45%;
+    --primary-foreground: 144 80% 6%;
+
+    --secondary: 225 10% 14%;
+    --secondary-foreground: 210 20% 96%;
+
+    --muted: 225 10% 12%;
+    --muted-foreground: 220 9% 58%;
+
+    --accent: 225 10% 16%;
+    --accent-foreground: 210 20% 96%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 224 11% 17%;
+    --input: 224 11% 17%;
+    --ring: 142 71% 45%;
+
+    /* Convención de resultado: verde = positivo, negro = negativo.
+       Decisión explícita del producto, distinta al verde/rojo habitual. */
+    --positive: 142 71% 45%;
+    --positive-foreground: 144 80% 6%;
+    --positive-soft: 142 60% 14%;
+
+    --negative: 0 0% 0%;
+    --negative-foreground: 0 0% 78%;
+    --negative-soft: 0 0% 4%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Cifras alineadas en columnas de precios y P/L */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
