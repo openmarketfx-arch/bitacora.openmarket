@@ -19,13 +19,14 @@ export const metadata = { title: "Operaciones — Open Market" };
 export default async function OperacionesPage({
   searchParams,
 }: {
-  searchParams: ParametrosFiltro;
+  searchParams: Promise<ParametrosFiltro>;
 }) {
   await requerirUsuario();
+  const params = await searchParams;
 
   // Una sola lectura: las colas y los filtros se resuelven en memoria, que sale
   // más barato que un viaje a la base por cada combinación.
-  const filtro = parsearFiltro(searchParams, "todo");
+  const filtro = parsearFiltro(params, "todo");
   const sinFiltrar = await listarOperaciones({ limite: 500 });
   const todas = filtrarOperaciones(sinFiltrar, filtro);
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta");
@@ -43,8 +44,8 @@ export default async function OperacionesPage({
           <div className="mb-5">
             <BarraFiltros
               periodo={filtro.periodo}
-              desde={searchParams.desde ?? ""}
-              hasta={searchParams.hasta ?? ""}
+              desde={params.desde ?? ""}
+              hasta={params.hasta ?? ""}
               instrumento={filtro.instrumento}
               instrumentos={instrumentosUsados(sinFiltrar)}
             />

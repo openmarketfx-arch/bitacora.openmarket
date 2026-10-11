@@ -25,11 +25,12 @@ export const metadata = { title: "Dashboard — Open Market" };
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: ParametrosFiltro;
+  searchParams: Promise<ParametrosFiltro>;
 }) {
   await requerirUsuario();
+  const params = await searchParams;
 
-  const filtro = parsearFiltro(searchParams, "30d");
+  const filtro = parsearFiltro(params, "30d");
 
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
@@ -89,8 +90,8 @@ export default async function DashboardPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BarraFiltros
             periodo={filtro.periodo}
-            desde={searchParams.desde ?? ""}
-            hasta={searchParams.hasta ?? ""}
+            desde={params.desde ?? ""}
+            hasta={params.hasta ?? ""}
             instrumento={filtro.instrumento}
             instrumentos={instrumentos}
           />

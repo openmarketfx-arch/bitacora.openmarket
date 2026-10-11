@@ -12,7 +12,7 @@ export const metadata = { title: "Nueva operación — Open Market" };
 
 export default async function NuevaOperacionPage() {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: cuentas }, { data: instrumentos }, { data: tags }, { data: seguidos }] =
     await Promise.all([

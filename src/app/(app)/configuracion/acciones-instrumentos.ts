@@ -29,7 +29,7 @@ export async function crearInstrumento(datos: unknown): Promise<Resultado> {
   }
 
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
   const d = parseado.data;
 
   const { error } = await supabase.from("instruments").insert({
@@ -59,7 +59,7 @@ export async function actualizarInstrumento(id: string, datos: unknown): Promise
   }
 
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
   const d = parseado.data;
 
   // RLS solo deja tocar instrumentos propios: los del sistema (user_id null)
@@ -94,7 +94,7 @@ export async function actualizarInstrumento(id: string, datos: unknown): Promise
 
 export async function eliminarInstrumento(id: string): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("instruments").delete().eq("id", id);
 
@@ -120,7 +120,7 @@ export async function alternarSeguimiento(
   seguir: boolean,
 ): Promise<Resultado> {
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   if (seguir) {
     const { error } = await supabase

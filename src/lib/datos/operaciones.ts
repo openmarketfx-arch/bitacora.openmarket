@@ -47,7 +47,7 @@ export interface FiltrosOperaciones {
 export async function listarOperaciones(
   filtros: FiltrosOperaciones = {},
 ): Promise<TradeCompleto[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   let consulta = supabase
     .from("trades")
@@ -79,7 +79,7 @@ export async function listarParaCalendario(
   desde: Date,
   hasta: Date,
 ): Promise<TradeCompleto[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const ini = desde.toISOString();
   const fin = hasta.toISOString();
 
@@ -105,7 +105,7 @@ export function fechaDeCalendario(op: TradeCompleto): string {
 }
 
 export async function obtenerOperacion(id: string): Promise<TradeCompleto | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase.from("trades").select(SELECCION).eq("id", id).maybeSingle();
 
@@ -117,7 +117,7 @@ export async function obtenerOperacion(id: string): Promise<TradeCompleto | null
 
 /** Conteos para los badges de navegación y los KPIs del dashboard. */
 export async function contarPorEstado(): Promise<{ abiertas: number; pendientes: number }> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [abiertas, pendientes] = await Promise.all([
     supabase

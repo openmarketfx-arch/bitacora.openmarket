@@ -23,15 +23,16 @@ export const metadata = { title: "Calendario — Open Market" };
 export default async function CalendarioPage({
   searchParams,
 }: {
-  searchParams: { mes?: string; instrumento?: string };
+  searchParams: Promise<{ mes?: string; instrumento?: string }>;
 }) {
   await requerirUsuario();
+  const params = await searchParams;
 
-  const { anio, mes } = parsearMes(searchParams.mes);
+  const { anio, mes } = parsearMes(params.mes);
   const { inicio, fin } = rangoRejilla(anio, mes);
 
   const delMes = await listarParaCalendario(inicio, fin);
-  const instrumento = searchParams.instrumento?.trim() || null;
+  const instrumento = params.instrumento?.trim() || null;
   const instrumentos = Array.from(
     new Set([...instrumentosUsados(delMes), ...(instrumento ? [instrumento] : [])]),
   ).sort();

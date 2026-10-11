@@ -34,7 +34,7 @@ export async function crearTag(datos: unknown): Promise<Resultado> {
   }
 
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("tags").insert({
     user_id: usuario.id,
@@ -62,7 +62,7 @@ export async function actualizarTag(id: string, datos: unknown): Promise<Resulta
   }
 
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase
     .from("tags")
@@ -90,7 +90,7 @@ export async function actualizarTag(id: string, datos: unknown): Promise<Resulta
 
 export async function eliminarTag(id: string): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // trade_tags cae por cascade: las operaciones se quedan, pierden el tag.
   const { error } = await supabase.from("tags").delete().eq("id", id);
@@ -107,7 +107,7 @@ export async function eliminarTag(id: string): Promise<Resultado> {
  */
 export async function fusionarTags(origenId: string, destinoId: string): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.rpc("fusionar_tags", {
     p_origen: origenId,

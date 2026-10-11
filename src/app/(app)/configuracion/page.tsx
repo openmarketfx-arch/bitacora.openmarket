@@ -15,7 +15,7 @@ export const metadata = { title: "Configuración — Open Market" };
 
 export default async function ConfiguracionPage() {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // RLS recorta cada consulta al usuario de la sesión. instruments incluye
   // además el catálogo del sistema (user_id null), visible para todos.

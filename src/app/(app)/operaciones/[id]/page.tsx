@@ -30,10 +30,10 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Operación — Open Market" };
 
-export default async function OperacionPage({ params }: { params: { id: string } }) {
+export default async function OperacionPage({ params }: { params: Promise<{ id: string }> }) {
   await requerirUsuario();
 
-  const op = await obtenerOperacion(params.id);
+  const op = await obtenerOperacion((await params).id);
   if (!op) notFound();
 
   const cierre = op.tipo_cierre ? TIPO_CIERRE_MAP[op.tipo_cierre] : null;
@@ -41,7 +41,7 @@ export default async function OperacionPage({ params }: { params: { id: string }
   // El bucket es privado: la imagen necesita una URL firmada de corta vida.
   let capturaUrl: string | null = null;
   if (op.captura_url) {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data } = await supabase.storage
       .from("trade-captures")
       .createSignedUrl(op.captura_url, 60 * 60);

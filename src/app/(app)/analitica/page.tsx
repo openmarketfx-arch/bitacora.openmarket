@@ -50,11 +50,12 @@ export const metadata = { title: "Analítica — Open Market" };
 export default async function AnaliticaPage({
   searchParams,
 }: {
-  searchParams: ParametrosFiltro;
+  searchParams: Promise<ParametrosFiltro>;
 }) {
   await requerirUsuario();
+  const params = await searchParams;
 
-  const filtro = parsearFiltro(searchParams, "todo");
+  const filtro = parsearFiltro(params, "todo");
   const todasSinFiltrar = await listarOperaciones({ limite: 2000 });
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarOperaciones(todasSinFiltrar, filtro);
@@ -63,8 +64,8 @@ export default async function AnaliticaPage({
   const barra = (
     <BarraFiltros
       periodo={filtro.periodo}
-      desde={searchParams.desde ?? ""}
-      hasta={searchParams.hasta ?? ""}
+      desde={params.desde ?? ""}
+      hasta={params.hasta ?? ""}
       instrumento={filtro.instrumento}
       instrumentos={instrumentos}
     />

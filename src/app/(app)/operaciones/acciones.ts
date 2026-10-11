@@ -139,7 +139,7 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
   }
 
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
   const d = parseado.data;
 
   // El instrumento decide si la medición son pips o puntos. Se resuelve aquí,
@@ -233,7 +233,7 @@ export async function crearTagRapido(
   }
 
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("tags")
@@ -315,7 +315,7 @@ export async function cerrarOperacion(id: string, datos: unknown): Promise<Resul
   }
 
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
   const d = parseado.data;
 
   // RLS limita el select a las operaciones del usuario.
@@ -424,7 +424,7 @@ export async function clasificarOperacion(id: string, datos: unknown): Promise<R
   }
 
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
   const d = parseado.data;
 
   const { data: operacion, error: errorLectura } = await supabase
@@ -470,7 +470,7 @@ export async function clasificarOperacion(id: string, datos: unknown): Promise<R
 /** Borra una operación. El cascade se lleva sus vínculos con tags. */
 export async function eliminarOperacion(id: string): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: operacion } = await supabase
     .from("trades")

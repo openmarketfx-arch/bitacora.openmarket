@@ -28,7 +28,7 @@ export async function crearCuenta(datos: unknown): Promise<Resultado> {
   }
 
   const usuario = await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("trading_accounts").insert({
     user_id: usuario.id,
@@ -54,7 +54,7 @@ export async function actualizarCuenta(id: string, datos: unknown): Promise<Resu
   }
 
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // RLS ya limita el update a las filas del usuario; no hace falta filtrar por user_id.
   const { error } = await supabase
@@ -78,7 +78,7 @@ export async function actualizarCuenta(id: string, datos: unknown): Promise<Resu
 
 export async function alternarActivoCuenta(id: string, activo: boolean): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("trading_accounts").update({ activo }).eq("id", id);
   if (error) return { ok: false, mensaje: error.message };
@@ -89,7 +89,7 @@ export async function alternarActivoCuenta(id: string, activo: boolean): Promise
 
 export async function eliminarCuenta(id: string): Promise<Resultado> {
   await requerirUsuario();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { error } = await supabase.from("trading_accounts").delete().eq("id", id);
 
