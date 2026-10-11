@@ -12,3 +12,8 @@ tsconfig.tsbuildinfo
 
 # Notas internas de trabajo (no van al repo)
 handoff.md
+
+# Cloudflare
+.open-next
+.wrangler
+.dev.vars
