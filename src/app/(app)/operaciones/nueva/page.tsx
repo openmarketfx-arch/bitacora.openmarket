@@ -4,7 +4,12 @@ import { FormularioOperacion } from "@/components/operaciones/formulario-operaci
 import type { InstrumentoOpcion } from "@/components/operaciones/selector-instrumento";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
+import { AlertaLimiteSuperado } from "@/components/riesgo/panel-riesgo";
 import { requerirUsuario } from "@/lib/auth";
+import { listarCuentas } from "@/lib/datos/cuentas";
+import { listarOperaciones } from "@/lib/datos/operaciones";
+import { calcularRiesgo } from "@/lib/datos/riesgo";
+import { obtenerZona } from "@/lib/zona-servidor";
 import { createClient } from "@/lib/supabase/server";
 import type { Instrument, Tag, TradingAccount } from "@/lib/types";
 
@@ -13,6 +18,7 @@ export const metadata = { title: "Nueva operación — Open Market" };
 export default async function NuevaOperacionPage() {
   await requerirUsuario();
   const supabase = await createClient();
+  const zona = await obtenerZona();
 
   const [{ data: cuentas }, { data: instrumentos }, { data: tags }, { data: seguidos }] =
     await Promise.all([
@@ -25,6 +31,13 @@ export default async function NuevaOperacionPage() {
       supabase.from("tags").select("*").order("nombre"),
       supabase.from("user_instruments").select("instrument_id"),
     ]);
+
+  // Si ya se pasó de un límite en el periodo actual, se avisa antes de abrir otra.
+  const [todasCuentas, historial] = await Promise.all([
+    listarCuentas(),
+    listarOperaciones({ limite: 2000 }),
+  ]);
+  const riesgo = calcularRiesgo(todasCuentas, historial, zona);
 
   const idsSeguidos = new Set((seguidos ?? []).map((s) => s.instrument_id as string));
 
@@ -48,7 +61,8 @@ export default async function NuevaOperacionPage() {
         }
       />
 
-      <main className="mx-auto max-w-4xl p-5 sm:p-8">
+      <main className="mx-auto max-w-4xl space-y-5 p-5 sm:p-8">
+        <AlertaLimiteSuperado riesgo={riesgo} />
         <FormularioOperacion
           cuentas={(cuentas ?? []) as TradingAccount[]}
           instrumentos={opciones}

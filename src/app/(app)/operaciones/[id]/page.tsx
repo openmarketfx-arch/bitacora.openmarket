@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
 import { requerirUsuario } from "@/lib/auth";
-import { obtenerOperacion } from "@/lib/datos/operaciones";
+import { listarCuentas } from "@/lib/datos/cuentas";
+import { calcularRiesgo } from "@/lib/datos/riesgo";
+import { etiquetaPeriodo, NOMBRE_PERIODO } from "@/components/riesgo/formato";
+import { claveDia } from "@/lib/zona";
+import { listarOperaciones, obtenerOperacion } from "@/lib/datos/operaciones";
 import {
   calcularPlan,
   formatFechaHora,
@@ -19,6 +23,7 @@ import {
   formatUnidades,
 } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { resultadoNeto } from "@/lib/resultado";
 import { obtenerZona } from "@/lib/zona-servidor";
 import {
   CATEGORIA_TAG_MAP,
@@ -37,6 +42,19 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
 
   const op = await obtenerOperacion((await params).id);
   if (!op) notFound();
+
+  // ¿Cerró en un día, semana o mes en que se superó el límite de pérdida de su cuenta?
+  let periodosSuperados: ReturnType<typeof calcularRiesgo>["incumplimientos"] = [];
+  if (op.estado_operacion === "cerrada" && op.fecha_hora_salida) {
+    const dia = claveDia(op.fecha_hora_salida, zona);
+    const [cuentas, historial] = await Promise.all([
+      listarCuentas(),
+      listarOperaciones({ limite: 2000 }),
+    ]);
+    periodosSuperados = calcularRiesgo(cuentas, historial, zona).incumplimientos.filter(
+      (i) => i.cuentaId === op.account.id && i.inicio <= dia && dia <= i.fin,
+    );
+  }
 
   const cierre = op.tipo_cierre ? TIPO_CIERRE_MAP[op.tipo_cierre] : null;
 
@@ -61,6 +79,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
 
   // El campo de medición que aplica depende del tipo de cierre.
   const medicion = cierre?.campo ? op[cierre.campo] : null;
+  const conCostos = Number(op.comision) !== 0 || Number(op.swap) !== 0;
 
   return (
     <>
@@ -93,12 +112,24 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
           )}
           {cierre && <Badge variant="default">{cierre.etiqueta}</Badge>}
           <CifraResultado
-            monto={op.resultado_dinero}
+            monto={resultadoNeto(op)}
             moneda={op.account.moneda_base}
             tamano="lg"
             className="ml-auto"
           />
         </div>
+
+        {periodosSuperados.length > 0 && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200/90">
+            <span className="font-medium text-red-300">
+              Esta operación cerró en un periodo en que superaste tu límite de pérdida:
+            </span>{" "}
+            {periodosSuperados
+              .map((i) => `${NOMBRE_PERIODO[i.tipo].singular} (${etiquetaPeriodo(i)})`)
+              .join(", ")}
+            .
+          </div>
+        )}
 
         <div className="grid gap-6 sm:grid-cols-2">
           <Card>
@@ -177,15 +208,48 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
                     valor={formatPrecio(op.precio_salida, op.instrument.decimales_precio)}
                     mono
                   />
-                  <Dato
-                    etiqueta="Resultado"
-                    valor={
-                      <CifraResultado
-                        monto={op.resultado_dinero}
-                        moneda={op.account.moneda_base}
+                  {conCostos ? (
+                    <>
+                      <Dato
+                        etiqueta="Resultado bruto"
+                        valor={
+                          <CifraResultado
+                            monto={op.resultado_dinero}
+                            moneda={op.account.moneda_base}
+                          />
+                        }
                       />
-                    }
-                  />
+                      <Dato
+                        etiqueta="Comisión"
+                        valor={
+                          <CifraResultado monto={op.comision} moneda={op.account.moneda_base} />
+                        }
+                      />
+                      <Dato
+                        etiqueta="Swap"
+                        valor={<CifraResultado monto={op.swap} moneda={op.account.moneda_base} />}
+                      />
+                      <Dato
+                        etiqueta="Resultado neto"
+                        valor={
+                          <CifraResultado
+                            monto={resultadoNeto(op)}
+                            moneda={op.account.moneda_base}
+                          />
+                        }
+                      />
+                    </>
+                  ) : (
+                    <Dato
+                      etiqueta="Resultado"
+                      valor={
+                        <CifraResultado
+                          monto={op.resultado_dinero}
+                          moneda={op.account.moneda_base}
+                        />
+                      }
+                    />
+                  )}
                   {cierre?.campo && (
                     <Dato
                       etiqueta={cierre.campoEtiqueta ?? "Medición"}

@@ -19,6 +19,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
+import {
+  AvisoConfigurarRiesgo,
+  EstadoActual,
+  ListaIncumplimientos,
+  ResumenIncumplimientos,
+} from "@/components/riesgo/panel-riesgo";
+import { fraseMasIncumplido } from "@/components/riesgo/formato";
 import { requerirUsuario } from "@/lib/auth";
 import { obtenerZona } from "@/lib/zona-servidor";
 import {
@@ -27,7 +34,9 @@ import {
   parsearFiltro,
   type ParametrosFiltro,
 } from "@/lib/datos/filtros";
+import { listarCuentas } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
+import { calcularRiesgo } from "@/lib/datos/riesgo";
 import {
   agruparTags,
   analizarDisciplina,
@@ -51,16 +60,25 @@ export const metadata = { title: "Analítica — Open Market" };
 export default async function AnaliticaPage({
   searchParams,
 }: {
-  searchParams: Promise<ParametrosFiltro>;
+  searchParams: Promise<ParametrosFiltro & { vista?: string }>;
 }) {
   await requerirUsuario();
   const params = await searchParams;
   const zona = await obtenerZona();
 
   const filtro = parsearFiltro(params, "todo", zona);
-  const todasSinFiltrar = await listarOperaciones({ limite: 2000 });
+  const [todasSinFiltrar, cuentas] = await Promise.all([
+    listarOperaciones({ limite: 2000 }),
+    listarCuentas(),
+  ]);
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarOperaciones(todasSinFiltrar, filtro);
+  // El riesgo es de la cuenta: ignora el instrumento y solo respeta las fechas.
+  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, zona, {
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+  });
+  const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
   const hayHistorial = todasSinFiltrar.some((o) => o.estado_operacion === "cerrada");
 
   const barra = (
@@ -162,7 +180,7 @@ export default async function AnaliticaPage({
         )}
 
         {/* Los tres hallazgos que el usuario busca al abrir esta pantalla. */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardContent className="space-y-1 p-4">
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -225,9 +243,32 @@ export default async function AnaliticaPage({
               )}
             </CardContent>
           </Card>
+
+          <Card className={riesgo.total > 0 ? "border-red-500/30" : undefined}>
+            <CardContent className="space-y-1 p-4">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Gestión del riesgo
+              </div>
+              {riesgoMedible ? (
+                <>
+                  <div className="text-sm font-medium">
+                    {plural(riesgo.total, "incumplimiento", "incumplimientos")}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {fraseMasIncumplido(riesgo.masIncumplidos) ??
+                      "Estás respetando tus límites de pérdida."}
+                  </p>
+                </>
+              ) : (
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Configura el capital y los límites de tu cuenta para medirlo.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        <Tabs defaultValue="tags">
+        <Tabs defaultValue={params.vista === "riesgo" ? "riesgo" : "tags"}>
           <TabsList>
             <TabsTrigger value="tags">Por confirmación</TabsTrigger>
             <TabsTrigger value="ordenes">Por tipo de orden</TabsTrigger>
@@ -235,6 +276,14 @@ export default async function AnaliticaPage({
             <TabsTrigger value="pips">Pips</TabsTrigger>
             <TabsTrigger value="cruce">Cruce</TabsTrigger>
             <TabsTrigger value="tiempo">Tiempo y rachas</TabsTrigger>
+            <TabsTrigger value="riesgo">
+              Riesgo
+              {riesgo.total > 0 && (
+                <span className="rounded-full bg-red-500/20 px-1.5 text-[10px] font-semibold text-red-300">
+                  {riesgo.total}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="tags">
@@ -411,6 +460,53 @@ export default async function AnaliticaPage({
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="riesgo" className="space-y-6">
+            {!riesgoMedible && <AvisoConfigurarRiesgo riesgo={riesgo} />}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Incumplimientos de tu límite de pérdida</CardTitle>
+                <CardDescription>
+                  Un periodo se incumple cuando su resultado neto (con comisiones y swaps) es una
+                  pérdida mayor que el % que fijaste, calculado sobre el saldo de la cuenta al
+                  empezar ese periodo. Cada periodo se mide por separado, así que dos días dentro
+                  de su límite diario pueden sumar una semana fuera del semanal.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <ResumenIncumplimientos riesgo={riesgo} etiquetaRango={filtro.etiquetaRango} />
+                <p className="text-xs text-muted-foreground">
+                  Esta medición es por cuenta: ignora el filtro de instrumento y respeta el de
+                  fechas.
+                </p>
+              </CardContent>
+            </Card>
+
+            {riesgoMedible && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Cómo vas ahora</CardTitle>
+                  <CardDescription>
+                    Lo que llevas perdido en el día, la semana y el mes en curso frente a tu límite.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EstadoActual cuentas={riesgo.cuentas} />
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Periodos en que te pasaste</CardTitle>
+                <CardDescription>El más reciente primero.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ListaIncumplimientos riesgo={riesgo} />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

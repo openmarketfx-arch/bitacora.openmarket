@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useZona } from "@/components/layout/proveedor-zona";
+import { CamposCostos } from "@/components/operaciones/campos-costos";
 import { formatFechaHora, formatPrecio } from "@/lib/format";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import { esOrdenPendiente, TIPO_ORDEN_MAP, type TipoCierre, type TradeCompleto } from "@/lib/types";
@@ -37,6 +38,8 @@ export function DialogoCierre({ operacion, onOpenChange }: Props) {
   const [fechaSalida, setFechaSalida] = useState(() => paraInputDateTime(zona));
   const [precioSalida, setPrecioSalida] = useState("");
   const [resultado, setResultado] = useState("");
+  const [comision, setComision] = useState("");
+  const [swap, setSwap] = useState("");
   const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(null);
   const [medicion, setMedicion] = useState("");
   const [seActivo, setSeActivo] = useState(true);
@@ -62,6 +65,8 @@ export function DialogoCierre({ operacion, onOpenChange }: Props) {
       fecha_hora_salida: noActivada ? "" : deInputDateTime(fechaSalida, zona),
       precio_salida: noActivada ? null : precioSalida,
       resultado_dinero: noActivada ? null : resultado,
+      comision: noActivada ? "" : comision,
+      swap: noActivada ? "" : swap,
       tipo_cierre: noActivada ? null : tipoCierre,
       medicion: noActivada || medicion === "" ? null : medicion,
       distancia: noActivada && distanciaNoActivada !== "" ? distanciaNoActivada : null,
@@ -158,6 +163,18 @@ export function DialogoCierre({ operacion, onOpenChange }: Props) {
               />
             </div>
           </div>
+          )}
+
+          {!sinActivar && (
+            <CamposCostos
+              id="cierre"
+              comision={comision}
+              swap={swap}
+              onComisionChange={setComision}
+              onSwapChange={setSwap}
+              resultado={resultado}
+              moneda={operacion.account.moneda_base}
+            />
           )}
 
           {!sinActivar && (

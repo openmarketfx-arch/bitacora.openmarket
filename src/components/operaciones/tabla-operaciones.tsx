@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { resultadoNeto } from "@/lib/resultado";
 import { EtiquetaTipoOrden } from "@/components/operaciones/selector-tipo-orden";
 import { Badge } from "@/components/ui/badge";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
@@ -93,7 +94,7 @@ export function TablaOperaciones({
 
               <TableCell className="text-right">
                 <CifraResultado
-                  monto={op.resultado_dinero}
+                  monto={resultadoNeto(op)}
                   moneda={op.account.moneda_base}
                   tamano="sm"
                 />

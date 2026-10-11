@@ -77,6 +77,9 @@ const esquemaOperacion = z
     fecha_hora_salida: z.string().optional().or(z.literal("")),
     precio_salida: z.coerce.number().positive().nullable().optional(),
     resultado_dinero: z.coerce.number().nullable().optional(),
+    /** Cobros del bróker, con el signo de la plataforma (negativo = cobrado). */
+    comision: z.coerce.number().finite().default(0),
+    swap: z.coerce.number().finite().default(0),
     tipo_cierre: z.enum(TIPOS).nullable().optional(),
     /** Lo que escribió el usuario, en pips o puntos según el instrumento. */
     medicion: z.coerce.number().min(0).nullable().optional(),
@@ -202,6 +205,8 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
       fecha_hora_salida: cerrada ? new Date(d.fecha_hora_salida!).toISOString() : null,
       precio_salida: cerrada ? d.precio_salida : null,
       resultado_dinero: cerrada ? d.resultado_dinero : null,
+      comision: cerrada ? d.comision : 0,
+      swap: cerrada ? d.swap : 0,
       tipo_cierre: tipoCierre,
       ...columnasDeMedicion(tipoCierre, medicionEnPrecio),
     })
@@ -300,6 +305,9 @@ const esquemaCierre = z
     fecha_hora_salida: z.string().optional().or(z.literal("")),
     precio_salida: z.coerce.number().positive().nullable().optional(),
     resultado_dinero: z.coerce.number().nullable().optional(),
+    /** Cobros del bróker, con el signo de la plataforma (negativo = cobrado). */
+    comision: z.coerce.number().finite().default(0),
+    swap: z.coerce.number().finite().default(0),
     tipo_cierre: z.enum(TIPOS).nullable().optional(),
     medicion: z.coerce.number().min(0).nullable().optional(),
   })
@@ -380,6 +388,8 @@ export async function cerrarOperacion(id: string, datos: unknown): Promise<Resul
         fecha_hora_salida: null,
         precio_salida: null,
         resultado_dinero: null,
+        comision: 0,
+        swap: 0,
         tipo_cierre: null,
         ...columnasDeMedicion(null, null),
       })
@@ -415,6 +425,8 @@ export async function cerrarOperacion(id: string, datos: unknown): Promise<Resul
       fecha_hora_salida: new Date(d.fecha_hora_salida!).toISOString(),
       precio_salida: d.precio_salida,
       resultado_dinero: d.resultado_dinero,
+      comision: d.comision,
+      swap: d.swap,
       tipo_cierre: tipo,
       ...columnasDeMedicion(tipo, medicionEnPrecio),
     })

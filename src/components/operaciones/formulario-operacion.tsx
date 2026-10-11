@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useZona } from "@/components/layout/proveedor-zona";
+import { CamposCostos } from "@/components/operaciones/campos-costos";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
   TIPO_ORDEN_MAP,
@@ -68,6 +69,8 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
   const [fechaSalida, setFechaSalida] = useState("");
   const [precioSalida, setPrecioSalida] = useState("");
   const [resultado, setResultado] = useState("");
+  const [comision, setComision] = useState("");
+  const [swap, setSwap] = useState("");
   const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(null);
   const [medicion, setMedicion] = useState("");
   /** Solo relevante en órdenes pendientes: si el precio llegó a tocarlas. */
@@ -134,6 +137,8 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
       fecha_hora_salida: conSalida ? deInputDateTime(fechaSalida, zona) : "",
       precio_salida: conSalida && precioSalida !== "" ? precioSalida : null,
       resultado_dinero: conSalida && resultado !== "" ? resultado : null,
+      comision: conSalida ? comision : "",
+      swap: conSalida ? swap : "",
       tipo_cierre: conSalida ? tipoCierre : null,
       medicion: conSalida && medicion !== "" ? medicion : null,
       distancia: noActivada && distanciaNoActivada !== "" ? distanciaNoActivada : null,
@@ -441,6 +446,18 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
                 />
               </div>
             </div>
+            )}
+
+            {(!pendiente || seActivo) && (
+              <CamposCostos
+                id="op"
+                comision={comision}
+                swap={swap}
+                onComisionChange={setComision}
+                onSwapChange={setSwap}
+                resultado={resultado}
+                moneda={cuenta?.moneda_base ?? "USD"}
+              />
             )}
 
             {(!pendiente || seActivo) && (

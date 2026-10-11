@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { resultadoNeto } from "@/lib/resultado";
 import { ChevronRight } from "lucide-react";
 import { EtiquetaTipoOrden } from "@/components/operaciones/selector-tipo-orden";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ShieldAlert } from "lucide-react";
 import { useZona } from "@/components/layout/proveedor-zona";
-import { formatPrecio, plural } from "@/lib/format";
+import { etiquetaPeriodo, NOMBRE_PERIODO } from "@/components/riesgo/formato";
+import { formatDinero, formatPrecio, plural } from "@/lib/format";
 import type { DiaCalendario } from "@/lib/datos/calendario";
 import { TIPO_CIERRE_MAP } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -51,7 +54,7 @@ export function DialogoDia({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="capitalize">{titulo}</DialogTitle>
+          <DialogTitle className="first-letter:uppercase">{titulo}</DialogTitle>
           <DialogDescription>
             {plural(dia.operaciones.length, "operación", "operaciones")}
             {dia.cerradas > 0 && ` · ${plural(dia.cerradas, "cerrada", "cerradas")}`}
@@ -59,6 +62,26 @@ export function DialogoDia({
             {dia.pendientes > 0 && ` · ${dia.pendientes} por revisar`}
           </DialogDescription>
         </DialogHeader>
+
+        {dia.incumplimientos.length > 0 && (
+          <div className="space-y-1.5 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-red-300">
+              <ShieldAlert className="h-4 w-4" />
+              {dia.incumplimientos.length === 1
+                ? "Superaste un límite de pérdida"
+                : `Superaste ${dia.incumplimientos.length} límites de pérdida`}
+            </div>
+            <ul className="space-y-0.5 text-xs text-red-200/80">
+              {dia.incumplimientos.map((i) => (
+                <li key={`${i.cuentaId}-${i.tipo}-${i.inicio}`}>
+                  Límite {NOMBRE_PERIODO[i.tipo].singular} ({etiquetaPeriodo(i)}): perdiste{" "}
+                  {formatDinero(i.perdida, i.moneda, { signo: false })} y tu máximo era{" "}
+                  {formatDinero(i.limite, i.moneda, { signo: false })}.
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {dia.neto !== null && (
           <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background/40 px-4 py-3">
@@ -122,7 +145,7 @@ export function DialogoDia({
                   )}
 
                   <CifraResultado
-                    monto={op.resultado_dinero}
+                    monto={resultadoNeto(op)}
                     moneda={op.account.moneda_base}
                     tamano="sm"
                   />

@@ -19,12 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { plural } from "@/lib/format";
+import { formatDinero, plural } from "@/lib/format";
 import type { TradingAccount } from "@/lib/types";
 
 /** Cuenta + cuántas operaciones tiene, para decidir si se puede borrar. */
 export interface CuentaConUso extends TradingAccount {
   operaciones: number;
+  /** Capital inicial más el resultado neto de lo cerrado. null si no hay capital. */
+  saldo: number | null;
 }
 
 export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
@@ -80,7 +82,7 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
         <div>
           <h2 className="text-sm font-semibold">Cuentas de trading</h2>
           <p className="text-xs text-muted-foreground">
-            Separa brókers, capital real de demo o estrategias distintas.
+            Cada cuenta lleva su capital y sus límites de pérdida diario, semanal y mensual.
           </p>
         </div>
         <Button size="sm" onClick={abrirNueva}>
@@ -101,9 +103,11 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
-              <TableHead>Bróker</TableHead>
               <TableHead>Moneda</TableHead>
               <TableHead>Tipo</TableHead>
+              <TableHead className="text-right">Capital inicial</TableHead>
+              <TableHead className="text-right">Saldo actual</TableHead>
+              <TableHead>Límite de pérdida</TableHead>
               <TableHead className="text-right">Operaciones</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="w-[1%]" />
@@ -113,12 +117,26 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
             {cuentas.map((cuenta) => (
               <TableRow key={cuenta.id} className={cuenta.activo ? "" : "opacity-55"}>
                 <TableCell className="font-medium">{cuenta.nombre}</TableCell>
-                <TableCell className="text-muted-foreground">{cuenta.broker ?? "—"}</TableCell>
                 <TableCell className="font-mono text-xs">{cuenta.moneda_base}</TableCell>
                 <TableCell>
                   <Badge variant={cuenta.tipo === "real" ? "primary" : "outline"}>
                     {cuenta.tipo === "real" ? "Real" : "Demo"}
                   </Badge>
+                </TableCell>
+                <TableCell className="tabular text-right font-mono text-xs">
+                  {cuenta.capital_inicial === null ? (
+                    <span className="text-amber-400">Sin capital</span>
+                  ) : (
+                    formatDinero(cuenta.capital_inicial, cuenta.moneda_base, { signo: false })
+                  )}
+                </TableCell>
+                <TableCell className="tabular text-right font-mono text-xs">
+                  {cuenta.saldo === null
+                    ? "—"
+                    : formatDinero(cuenta.saldo, cuenta.moneda_base, { signo: false })}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  <LimitesDeCuenta cuenta={cuenta} />
                 </TableCell>
                 <TableCell className="tabular text-right font-mono text-xs">
                   {cuenta.operaciones}
@@ -192,4 +210,18 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
       />
     </>
   );
+}
+
+const pct = (n: number) => `${String(Number(n))} %`;
+
+/** "3 % día · 6 % semana · 10 % mes", o un aviso si no hay ninguno. */
+function LimitesDeCuenta({ cuenta }: { cuenta: TradingAccount }) {
+  const partes = [
+    cuenta.limite_riesgo_diario !== null ? `${pct(cuenta.limite_riesgo_diario)} día` : null,
+    cuenta.limite_riesgo_semanal !== null ? `${pct(cuenta.limite_riesgo_semanal)} semana` : null,
+    cuenta.limite_riesgo_mensual !== null ? `${pct(cuenta.limite_riesgo_mensual)} mes` : null,
+  ].filter((p): p is string => p !== null);
+
+  if (partes.length === 0) return <span className="text-amber-400">Sin límites</span>;
+  return <span className="tabular font-mono">{partes.join(" · ")}</span>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Circle, Clock } from "lucide-react";
+import { Circle, Clock, ShieldAlert } from "lucide-react";
 import { DialogoDia } from "@/components/calendario/dialogo-dia";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
 import { formatDinero, plural, tonoDe } from "@/lib/format";
@@ -44,6 +44,8 @@ export function RejillaMes({ mes }: { mes: MesCalendario }) {
 function Celda({ dia, onAbrir }: { dia: DiaCalendario; onAbrir: () => void }) {
   const tono = tonoDe(dia.neto);
   const tieneAlgo = dia.operaciones.length > 0;
+  const superoLimiteDiario = dia.incumplimientos.some((i) => i.tipo === "diario");
+  const periodosSuperados = dia.incumplimientos.length;
 
   // El negro va de relleno, igual que en las cifras de resultado: sobre el
   // fondo de la app un día perdedor se lee por su mancha, no por el texto.
@@ -76,6 +78,7 @@ function Celda({ dia, onAbrir }: { dia: DiaCalendario; onAbrir: () => void }) {
         !dia.delMes && "opacity-35",
         tieneAlgo ? "cursor-pointer hover:brightness-125" : "cursor-default",
         dia.esHoy && "ring-1 ring-inset ring-primary/60",
+        superoLimiteDiario && "outline outline-1 -outline-offset-1 outline-red-500/70",
       )}
     >
       <div className="flex items-start justify-between gap-1">
@@ -90,6 +93,17 @@ function Celda({ dia, onAbrir }: { dia: DiaCalendario; onAbrir: () => void }) {
         </span>
 
         <div className="flex items-center gap-1">
+          {periodosSuperados > 0 && (
+            <span
+              title={`Superaste ${periodosSuperados === 1 ? "un límite de pérdida" : `${periodosSuperados} límites de pérdida`} que incluye${periodosSuperados === 1 ? "" : "n"} este día`}
+              className={cn(
+                "flex items-center gap-0.5 text-[10px]",
+                superoLimiteDiario ? "text-red-400" : "text-red-400/60",
+              )}
+            >
+              <ShieldAlert className="h-3 w-3" />
+            </span>
+          )}
           {dia.abiertas > 0 && (
             <span
               title={`${dia.abiertas} abierta${dia.abiertas === 1 ? "" : "s"}`}

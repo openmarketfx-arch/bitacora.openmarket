@@ -263,10 +263,17 @@ export interface TradingAccount {
   id: string;
   user_id: string;
   nombre: string;
+  /** Ya no se pide en la app; la columna se conserva para no perder datos. */
   broker: string | null;
   moneda_base: string;
   tipo: AccountType;
   activo: boolean;
+  /** Dinero con el que arranca la cuenta. El saldo actual se deduce de él. */
+  capital_inicial: number | null;
+  /** % máximo del saldo que se acepta perder en un día / semana / mes. null = sin límite. */
+  limite_riesgo_diario: number | null;
+  limite_riesgo_semanal: number | null;
+  limite_riesgo_mensual: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -336,6 +343,9 @@ export interface Trade {
   distancia_no_activada: number | null;
   lotaje: number | null;
   resultado_dinero: number | null;
+  /** Cobros del bróker, con el signo de la plataforma (negativo = cobrado). */
+  comision: number;
+  swap: number;
   estado_operacion: EstadoOperacion;
   estado_revision: EstadoRevision;
   tipo_cierre: TipoCierre | null;

@@ -5,12 +5,19 @@ import { CurvaEquity } from "@/components/dashboard/curva-equity";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { TarjetaKpi } from "@/components/dashboard/tarjeta-kpi";
 import { TiraDias } from "@/components/dashboard/tira-dias";
+import {
+  AvisoConfigurarRiesgo,
+  EstadoActual,
+  ResumenIncumplimientos,
+} from "@/components/riesgo/panel-riesgo";
 import { TablaOperaciones } from "@/components/operaciones/tabla-operaciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requerirUsuario } from "@/lib/auth";
 import { obtenerZona } from "@/lib/zona-servidor";
+import { listarCuentas } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
+import { calcularRiesgo } from "@/lib/datos/riesgo";
 import { calcularKpis, construirEquity, ultimosDias } from "@/lib/datos/metricas";
 import {
   filtrarOperaciones,
@@ -37,7 +44,10 @@ export default async function DashboardPage({
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
   // estado actual y no deben depender de la ventana temporal elegida.
-  const todasSinFiltrar = await listarOperaciones({ limite: 2000 });
+  const [todasSinFiltrar, cuentas] = await Promise.all([
+    listarOperaciones({ limite: 2000 }),
+    listarCuentas(),
+  ]);
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarPorInstrumento(todasSinFiltrar, filtro.instrumento);
 
@@ -46,6 +56,14 @@ export default async function DashboardPage({
   const cerradasPeriodo = enPeriodo.filter((o) => o.estado_operacion === "cerrada");
   const equity = construirEquity(cerradasPeriodo, zona);
   const kpis = calcularKpis(enPeriodo, equity);
+
+  // El riesgo es de la cuenta, no del instrumento: usa todas las operaciones y solo
+  // respeta el rango de fechas elegido.
+  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, zona, {
+    desde: filtro.desde,
+    hasta: filtro.hasta,
+  });
+  const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
 
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta").length;
   const pendientes = todas.filter((o) => o.estado_revision === "pendiente").length;
@@ -166,6 +184,35 @@ export default async function DashboardPage({
             }
           />
         </div>
+
+        {riesgoMedible ? (
+          <Card className={riesgo.total > 0 ? "border-red-500/30" : undefined}>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm">Gestión del riesgo</CardTitle>
+                  <CardDescription>
+                    Cuántas veces superaste tu límite de pérdida diario, semanal o mensual.
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/analitica?vista=riesgo">Ver detalle</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ResumenIncumplimientos riesgo={riesgo} etiquetaRango={etiquetaPeriodo} />
+              <div className="border-t border-border pt-5">
+                <h3 className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Cómo vas ahora
+                </h3>
+                <EstadoActual cuentas={riesgo.cuentas} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          cuentas.length > 0 && <AvisoConfigurarRiesgo riesgo={riesgo} />
+        )}
 
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">

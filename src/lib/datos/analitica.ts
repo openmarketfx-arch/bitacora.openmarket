@@ -1,4 +1,5 @@
 import { aUnidades, pipsEntre, unidadDe, type UnidadMedida } from "@/lib/format";
+import { resultadoNeto } from "@/lib/resultado";
 import { partesEnZona } from "@/lib/zona";
 import {
   TIPOS_CIERRE,
@@ -28,12 +29,12 @@ export interface Rendimiento {
 }
 
 export function medirRendimiento(operaciones: TradeCompleto[]): Rendimiento {
-  const ganadoras = operaciones.filter((o) => Number(o.resultado_dinero) > 0).length;
-  const perdedoras = operaciones.filter((o) => Number(o.resultado_dinero) < 0).length;
-  const breakEven = operaciones.filter((o) => Number(o.resultado_dinero) === 0).length;
+  const ganadoras = operaciones.filter((o) => (resultadoNeto(o) ?? 0) > 0).length;
+  const perdedoras = operaciones.filter((o) => (resultadoNeto(o) ?? 0) < 0).length;
+  const breakEven = operaciones.filter((o) => (resultadoNeto(o) ?? 0) === 0).length;
   const decisivas = ganadoras + perdedoras;
 
-  const plTotal = operaciones.reduce((s, o) => s + Number(o.resultado_dinero ?? 0), 0);
+  const plTotal = operaciones.reduce((s, o) => s + (resultadoNeto(o) ?? 0), 0);
 
   return {
     operaciones: operaciones.length,
@@ -182,7 +183,7 @@ export function analizarDisciplina(clasificadas: TradeCompleto[]): RatioDiscipli
     correctos: correctos.length,
     incorrectos: incorrectos.length,
     aciertoAlCerrar: total ? (correctos.length / total) * 100 : null,
-    costeIncorrectos: incorrectos.reduce((s, o) => s + Math.abs(Number(o.resultado_dinero ?? 0)), 0),
+    costeIncorrectos: incorrectos.reduce((s, o) => s + Math.abs((resultadoNeto(o) ?? 0)), 0),
   };
 }
 
@@ -223,7 +224,7 @@ export function cruzarTagYCierre(clasificadas: TradeCompleto[]): FilaCruce[] {
       }
       fila.total += 1;
       fila.conteos[op.tipo_cierre] += 1;
-      fila.plTotal += Number(op.resultado_dinero ?? 0);
+      fila.plTotal += (resultadoNeto(op) ?? 0);
     }
   }
 
@@ -335,7 +336,7 @@ export function calcularRachas(cerradas: TradeCompleto[]): Rachas {
   let signo: "ganando" | "perdiendo" | null = null;
 
   for (const op of ordenadas) {
-    const resultado = Number(op.resultado_dinero ?? 0);
+    const resultado = (resultadoNeto(op) ?? 0);
     // Un break even no rompe la racha ni la alarga: es neutro.
     if (resultado === 0) continue;
 

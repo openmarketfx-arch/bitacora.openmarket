@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { resultadoNeto } from "@/lib/resultado";
 import Link from "next/link";
 import { CheckCircle2, ClipboardCheck, Clock } from "lucide-react";
 import { useZona } from "@/components/layout/proveedor-zona";
@@ -188,7 +189,7 @@ function Cola({
             <div className="ml-auto flex items-center gap-3">
               {op.estado_operacion === "cerrada" && (
                 <CifraResultado
-                  monto={op.resultado_dinero}
+                  monto={resultadoNeto(op)}
                   moneda={op.account.moneda_base}
                   tamano="md"
                 />

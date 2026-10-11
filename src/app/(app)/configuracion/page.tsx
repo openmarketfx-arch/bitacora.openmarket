@@ -8,6 +8,7 @@ import {
 } from "@/components/instrumentos/panel-instrumentos";
 import { PanelTags, type TagConUso } from "@/components/tags/panel-tags";
 import { requerirUsuario } from "@/lib/auth";
+import { resultadoNeto } from "@/lib/resultado";
 import { createClient } from "@/lib/supabase/server";
 import type { Instrument, Tag, TradingAccount } from "@/lib/types";
 
@@ -40,7 +41,9 @@ export default async function ConfiguracionPage() {
       .order("simbolo"),
     supabase.from("tags").select("*").order("nombre"),
     supabase.from("user_instruments").select("instrument_id"),
-    supabase.from("trades").select("trading_account_id"),
+    supabase
+      .from("trades")
+      .select("trading_account_id, estado_operacion, resultado_dinero, comision, swap"),
     supabase.from("trades").select("instrument_id"),
     supabase.from("trade_tags").select("tag_id"),
   ]);
@@ -55,6 +58,15 @@ export default async function ConfiguracionPage() {
   };
 
   const usoCuentas = contar(tradesCuenta, "trading_account_id");
+
+  // Saldo = capital inicial + lo que movieron las operaciones cerradas, costos incluidos.
+  const netoPorCuenta = new Map<string, number>();
+  for (const t of tradesCuenta ?? []) {
+    if (t.estado_operacion !== "cerrada") continue;
+    const neto = resultadoNeto(t);
+    if (neto === null) continue;
+    netoPorCuenta.set(t.trading_account_id, (netoPorCuenta.get(t.trading_account_id) ?? 0) + neto);
+  }
   const usoInstrumentos = contar(tradesInstrumento, "instrument_id");
   const usoTags = contar(usosTags, "tag_id");
   const idsSeguidos = new Set((seguidos ?? []).map((s) => s.instrument_id as string));
@@ -62,6 +74,10 @@ export default async function ConfiguracionPage() {
   const cuentasConUso: CuentaConUso[] = ((cuentas ?? []) as TradingAccount[]).map((c) => ({
     ...c,
     operaciones: usoCuentas.get(c.id) ?? 0,
+    saldo:
+      c.capital_inicial === null
+        ? null
+        : Math.round((Number(c.capital_inicial) + (netoPorCuenta.get(c.id) ?? 0)) * 100) / 100,
   }));
 
   // Los seguidos suben arriba; el resto mantiene el orden por clase y símbolo.

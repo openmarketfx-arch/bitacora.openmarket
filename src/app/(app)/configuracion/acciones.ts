@@ -5,6 +5,11 @@ import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
+/** Los límites y el capital cambian cifras en el dashboard, la analítica y el calendario. */
+function revalidarRiesgo() {
+  for (const ruta of ["/", "/analitica", "/calendario", "/operaciones"]) revalidatePath(ruta);
+}
+
 export interface Resultado {
   ok: boolean;
   mensaje?: string;
@@ -16,10 +21,71 @@ const esquemaCuenta = z.object({
     .trim()
     .min(1, "Ponle un nombre a la cuenta.")
     .max(80, "El nombre no puede pasar de 80 caracteres."),
-  broker: z.string().trim().max(80).optional().or(z.literal("")),
   moneda_base: z.string().trim().min(2).max(8),
   tipo: z.enum(["real", "demo"]),
+  capital_inicial: numeroOpcional("El capital inicial", { min: 0, max: 1_000_000_000 }),
+  limite_riesgo_diario: porcentajeOpcional("El límite diario"),
+  limite_riesgo_semanal: porcentajeOpcional("El límite semanal"),
+  limite_riesgo_mensual: porcentajeOpcional("El límite mensual"),
+}).superRefine((d, ctx) => {
+  // Un % de riesgo no significa nada sin un capital sobre el que aplicarlo.
+  const hayLimite =
+    d.limite_riesgo_diario !== null ||
+    d.limite_riesgo_semanal !== null ||
+    d.limite_riesgo_mensual !== null;
+  if (hayLimite && (d.capital_inicial === null || d.capital_inicial <= 0)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Para medir el riesgo hace falta el capital de la cuenta. Ponlo primero.",
+      path: ["capital_inicial"],
+    });
+  }
 });
+
+/** Campo numérico que puede venir vacío (null) o con un valor dentro del rango. */
+function numeroOpcional(nombre: string, { min, max }: { min: number; max: number }) {
+  return z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v, ctx) => {
+      if (v === null || v === undefined || String(v).trim() === "") return null;
+      const n = Number(String(v).replace(",", "."));
+      if (!Number.isFinite(n) || n < min || n > max) {
+        ctx.addIssue({ code: "custom", message: `${nombre} no es un número válido.` });
+        return z.NEVER;
+      }
+      return Math.round(n * 100) / 100;
+    });
+}
+
+/** % entre 0 (excluido) y 100, o vacío si no se quiere ese límite. */
+function porcentajeOpcional(nombre: string) {
+  return z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v, ctx) => {
+      if (v === null || v === undefined || String(v).trim() === "") return null;
+      const n = Number(String(v).replace(",", "."));
+      if (!Number.isFinite(n) || n <= 0 || n > 100) {
+        ctx.addIssue({ code: "custom", message: `${nombre} debe estar entre 0 y 100 %.` });
+        return z.NEVER;
+      }
+      return Math.round(n * 100) / 100;
+    });
+}
+
+/** Lo que se guarda de la cuenta. El bróker ya no se pide: su columna queda intacta. */
+function columnasDeCuenta(d: z.infer<typeof esquemaCuenta>) {
+  return {
+    nombre: d.nombre,
+    moneda_base: d.moneda_base.toUpperCase(),
+    tipo: d.tipo,
+    capital_inicial: d.capital_inicial,
+    limite_riesgo_diario: d.limite_riesgo_diario,
+    limite_riesgo_semanal: d.limite_riesgo_semanal,
+    limite_riesgo_mensual: d.limite_riesgo_mensual,
+  };
+}
 
 export async function crearCuenta(datos: unknown): Promise<Resultado> {
   const parseado = esquemaCuenta.safeParse(datos);
@@ -32,10 +98,7 @@ export async function crearCuenta(datos: unknown): Promise<Resultado> {
 
   const { error } = await supabase.from("trading_accounts").insert({
     user_id: usuario.id,
-    nombre: parseado.data.nombre,
-    broker: parseado.data.broker || null,
-    moneda_base: parseado.data.moneda_base.toUpperCase(),
-    tipo: parseado.data.tipo,
+    ...columnasDeCuenta(parseado.data),
   });
 
   if (error) {
@@ -44,6 +107,7 @@ export async function crearCuenta(datos: unknown): Promise<Resultado> {
   }
 
   revalidatePath("/configuracion");
+  revalidarRiesgo();
   return { ok: true };
 }
 
@@ -59,12 +123,7 @@ export async function actualizarCuenta(id: string, datos: unknown): Promise<Resu
   // RLS ya limita el update a las filas del usuario; no hace falta filtrar por user_id.
   const { error } = await supabase
     .from("trading_accounts")
-    .update({
-      nombre: parseado.data.nombre,
-      broker: parseado.data.broker || null,
-      moneda_base: parseado.data.moneda_base.toUpperCase(),
-      tipo: parseado.data.tipo,
-    })
+    .update(columnasDeCuenta(parseado.data))
     .eq("id", id);
 
   if (error) {
@@ -73,6 +132,7 @@ export async function actualizarCuenta(id: string, datos: unknown): Promise<Resu
   }
 
   revalidatePath("/configuracion");
+  revalidarRiesgo();
   return { ok: true };
 }
 

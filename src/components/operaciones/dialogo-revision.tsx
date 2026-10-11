@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { resultadoNeto } from "@/lib/resultado";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -98,7 +99,7 @@ export function DialogoRevision({ operacion, onOpenChange }: Props) {
               Resultado
             </div>
             <CifraResultado
-              monto={operacion.resultado_dinero}
+              monto={resultadoNeto(operacion)}
               moneda={operacion.account.moneda_base}
             />
           </div>

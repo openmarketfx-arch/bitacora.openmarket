@@ -8,7 +8,9 @@ import {
   partesDeClave,
   sumarDias,
 } from "@/lib/zona";
+import { resultadoNeto } from "@/lib/resultado";
 import { fechaDeCalendario } from "@/lib/datos/operaciones";
+import type { Incumplimiento } from "@/lib/datos/riesgo";
 import type { TradeCompleto } from "@/lib/types";
 
 export interface DiaCalendario {
@@ -25,6 +27,8 @@ export interface DiaCalendario {
   abiertas: number;
   pendientes: number;
   operaciones: TradeCompleto[];
+  /** Periodos de riesgo incumplidos que incluyen este día (diario, semanal o mensual). */
+  incumplimientos: Incumplimiento[];
 }
 
 export interface MesCalendario {
@@ -70,6 +74,7 @@ export function construirMes(
   mes: number,
   operaciones: TradeCompleto[],
   zona: string,
+  incumplimientos: Incumplimiento[] = [],
 ): MesCalendario {
   const { inicio, fin, claveInicio } = rangoRejilla(anio, mes, zona);
 
@@ -97,7 +102,7 @@ export function construirMes(
     // Sin operaciones cerradas el día no tiene resultado: queda neutro, que no
     // es lo mismo que un día que cerró exactamente en cero.
     const neto = cerradas.length
-      ? cerradas.reduce((suma, o) => suma + Number(o.resultado_dinero ?? 0), 0)
+      ? cerradas.reduce((suma, o) => suma + (resultadoNeto(o) ?? 0), 0)
       : null;
 
     const partes = partesDeClave(clave);
@@ -120,6 +125,7 @@ export function construirMes(
       abiertas,
       pendientes,
       operaciones: delDia,
+      incumplimientos: incumplimientos.filter((i) => i.inicio <= clave && clave <= i.fin),
     });
   }
 

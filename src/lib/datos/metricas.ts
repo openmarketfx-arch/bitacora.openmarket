@@ -6,6 +6,7 @@ import {
   partesDeClave,
   sumarDias,
 } from "@/lib/zona";
+import { resultadoNeto } from "@/lib/resultado";
 import type { TradeCompleto } from "@/lib/types";
 
 export type Periodo = "7d" | "30d" | "90d" | "anio" | "todo";
@@ -91,7 +92,7 @@ export function construirEquity(cerradas: TradeCompleto[], zona: string): PuntoE
 
   for (const op of cerradas) {
     const clave = claveDia(op.fecha_hora_salida ?? op.fecha_hora_entrada, zona);
-    porDia.set(clave, (porDia.get(clave) ?? 0) + Number(op.resultado_dinero ?? 0));
+    porDia.set(clave, (porDia.get(clave) ?? 0) + (resultadoNeto(op) ?? 0));
   }
 
   let acumulado = 0;
@@ -110,11 +111,11 @@ export function calcularKpis(
 ): Kpis {
   const cerradas = operaciones.filter((o) => o.estado_operacion === "cerrada");
 
-  const ganadoras = cerradas.filter((o) => Number(o.resultado_dinero) > 0);
-  const perdedoras = cerradas.filter((o) => Number(o.resultado_dinero) < 0);
-  const breakEven = cerradas.filter((o) => Number(o.resultado_dinero) === 0);
+  const ganadoras = cerradas.filter((o) => (resultadoNeto(o) ?? 0) > 0);
+  const perdedoras = cerradas.filter((o) => (resultadoNeto(o) ?? 0) < 0);
+  const breakEven = cerradas.filter((o) => (resultadoNeto(o) ?? 0) === 0);
 
-  const plTotal = cerradas.reduce((s, o) => s + Number(o.resultado_dinero ?? 0), 0);
+  const plTotal = cerradas.reduce((s, o) => s + (resultadoNeto(o) ?? 0), 0);
 
   // Las que cierran exactamente en cero no son ni acierto ni fallo: incluirlas
   // hundiría el win rate sin que eso signifique que la lectura fue mala.
@@ -122,7 +123,7 @@ export function calcularKpis(
   const winRate = decisivas > 0 ? (ganadoras.length / decisivas) * 100 : null;
 
   const suma = (lista: TradeCompleto[]) =>
-    lista.reduce((s, o) => s + Number(o.resultado_dinero ?? 0), 0);
+    lista.reduce((s, o) => s + (resultadoNeto(o) ?? 0), 0);
 
   const gananciaMedia = ganadoras.length ? suma(ganadoras) / ganadoras.length : null;
   const perdidaMedia = perdedoras.length ? suma(perdedoras) / perdedoras.length : null;
@@ -176,7 +177,7 @@ export function ultimosDias(
   for (const op of cerradas) {
     const clave = claveDia(op.fecha_hora_salida ?? op.fecha_hora_entrada, zona);
     const actual = porDia.get(clave) ?? { neto: 0, operaciones: 0 };
-    actual.neto += Number(op.resultado_dinero ?? 0);
+    actual.neto += (resultadoNeto(op) ?? 0);
     actual.operaciones += 1;
     porDia.set(clave, actual);
   }
