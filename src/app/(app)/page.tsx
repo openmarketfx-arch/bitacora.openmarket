@@ -185,35 +185,6 @@ export default async function DashboardPage({
           />
         </div>
 
-        {riesgoMedible ? (
-          <Card className={riesgo.total > 0 ? "border-red-500/30" : undefined}>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm">Gestión del riesgo</CardTitle>
-                  <CardDescription>
-                    Cuántas veces superaste tu límite de pérdida diario, semanal o mensual.
-                  </CardDescription>
-                </div>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/analitica?vista=riesgo">Ver detalle</Link>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ResumenIncumplimientos riesgo={riesgo} etiquetaRango={etiquetaPeriodo} />
-              <div className="border-t border-border pt-5">
-                <h3 className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Cómo vas ahora
-                </h3>
-                <EstadoActual cuentas={riesgo.cuentas} />
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          cuentas.length > 0 && <AvisoConfigurarRiesgo riesgo={riesgo} />
-        )}
-
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -276,6 +247,35 @@ export default async function DashboardPage({
             <TiraDias dias={dias} />
           </CardContent>
         </Card>
+
+        {riesgoMedible ? (
+          <Card className={riesgo.total > 0 ? "border-red-500/30" : undefined}>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm">Gestión del riesgo</CardTitle>
+                  <CardDescription>
+                    Cuántas veces superaste tu límite de pérdida diario, semanal o mensual.
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/analitica?vista=riesgo">Ver detalle</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ResumenIncumplimientos riesgo={riesgo} etiquetaRango={etiquetaPeriodo} />
+              <div className="border-t border-border pt-5">
+                <h3 className="pb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Cómo vas ahora
+                </h3>
+                <EstadoActual cuentas={riesgo.cuentas} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          cuentas.length > 0 && <AvisoConfigurarRiesgo riesgo={riesgo} />
+        )}
 
         <Card>
           <CardHeader>
