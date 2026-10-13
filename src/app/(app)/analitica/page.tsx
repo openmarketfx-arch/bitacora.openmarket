@@ -34,7 +34,7 @@ import {
   parsearFiltro,
   type ParametrosFiltro,
 } from "@/lib/datos/filtros";
-import { listarCuentas } from "@/lib/datos/cuentas";
+import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
 import {
@@ -67,14 +67,15 @@ export default async function AnaliticaPage({
   const zona = await obtenerZona();
 
   const filtro = parsearFiltro(params, "todo", zona);
-  const [todasSinFiltrar, cuentas] = await Promise.all([
+  const [todasSinFiltrar, cuentas, retiros] = await Promise.all([
     listarOperaciones({ limite: 2000 }),
     listarCuentas(),
+    listarRetiros(),
   ]);
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarOperaciones(todasSinFiltrar, filtro);
   // El riesgo es de la cuenta: ignora el instrumento y solo respeta las fechas.
-  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, zona, {
+  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, retiros, zona, {
     desde: filtro.desde,
     hasta: filtro.hasta,
   });

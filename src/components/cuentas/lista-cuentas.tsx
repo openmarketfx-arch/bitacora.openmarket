@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Plus, PowerOff, Power, Trash2, Wallet } from "lucide-react";
+import { Banknote, Pencil, Plus, PowerOff, Power, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
   alternarActivoCuenta,
   eliminarCuenta,
 } from "@/app/(app)/configuracion/acciones";
 import { DialogoCuenta } from "@/components/cuentas/dialogo-cuenta";
+import { DialogoRetiros } from "@/components/cuentas/dialogo-retiros";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo-confirmacion";
@@ -20,19 +21,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDinero, plural } from "@/lib/format";
-import type { TradingAccount } from "@/lib/types";
+import type { Retiro, TradingAccount } from "@/lib/types";
 
 /** Cuenta + cuántas operaciones tiene, para decidir si se puede borrar. */
 export interface CuentaConUso extends TradingAccount {
   operaciones: number;
-  /** Capital inicial más el resultado neto de lo cerrado. null si no hay capital. */
+  /** Capital inicial más el resultado neto de lo cerrado, menos los retiros. null si no hay capital. */
   saldo: number | null;
+  /** Lo que movieron las operaciones cerradas, comisiones y swaps incluidos. */
+  resultadoNeto: number;
+  retiros: Retiro[];
+  retirado: number;
 }
 
 export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
   const [dialogoAbierto, setDialogoAbierto] = useState(false);
   const [enEdicion, setEnEdicion] = useState<TradingAccount | null>(null);
   const [porBorrar, setPorBorrar] = useState<CuentaConUso | null>(null);
+  const [retirosDeId, setRetirosDeId] = useState<string | null>(null);
+  const cuentaConRetiros = cuentas.find((c) => c.id === retirosDeId) ?? null;
   const [pendiente, iniciarTransicion] = useTransition();
 
   function abrirNueva() {
@@ -134,6 +141,11 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
                   {cuenta.saldo === null
                     ? "—"
                     : formatDinero(cuenta.saldo, cuenta.moneda_base, { signo: false })}
+                  {cuenta.retirado > 0 && (
+                    <div className="text-[10px] text-muted-foreground">
+                      −{formatDinero(cuenta.retirado, cuenta.moneda_base, { signo: false })} retirados
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   <LimitesDeCuenta cuenta={cuenta} />
@@ -156,6 +168,15 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
                       onClick={() => abrirEdicion(cuenta)}
                     >
                       <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Retiros"
+                      aria-label={`Retiros de ${cuenta.nombre}`}
+                      onClick={() => setRetirosDeId(cuenta.id)}
+                    >
+                      <Banknote className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -195,6 +216,14 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
           abierto={dialogoAbierto}
           onOpenChange={setDialogoAbierto}
           cuenta={enEdicion}
+        />
+      )}
+
+      {cuentaConRetiros && (
+        <DialogoRetiros
+          key={cuentaConRetiros.id}
+          cuenta={cuentaConRetiros}
+          onOpenChange={(abierto) => !abierto && setRetirosDeId(null)}
         />
       )}
 

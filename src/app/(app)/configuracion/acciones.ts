@@ -3,12 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
+import { revalidarRiesgo } from "@/lib/revalidar-riesgo";
 import { createClient } from "@/lib/supabase/server";
-
-/** Los límites y el capital cambian cifras en el dashboard, la analítica y el calendario. */
-function revalidarRiesgo() {
-  for (const ruta of ["/", "/analitica", "/calendario", "/operaciones"]) revalidatePath(ruta);
-}
 
 export interface Resultado {
   ok: boolean;
@@ -159,7 +155,7 @@ export async function eliminarCuenta(id: string): Promise<Resultado> {
       return {
         ok: false,
         mensaje:
-          "Esta cuenta tiene operaciones registradas, así que no se puede borrar sin perder ese historial. Desactívala en su lugar.",
+          "Esta cuenta tiene operaciones o retiros registrados, así que no se puede borrar sin perder ese historial. Desactívala en su lugar.",
       };
     }
     return { ok: false, mensaje: error.message };

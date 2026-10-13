@@ -278,6 +278,17 @@ export interface TradingAccount {
   updated_at: string;
 }
 
+/** Dinero que se sacó de una cuenta. Baja el saldo sin ser una pérdida de trading. */
+export interface Retiro {
+  id: string;
+  user_id: string;
+  trading_account_id: string;
+  monto: number;
+  fecha_hora: string;
+  nota: string | null;
+  created_at: string;
+}
+
 export interface Instrument {
   id: string;
   user_id: string | null;

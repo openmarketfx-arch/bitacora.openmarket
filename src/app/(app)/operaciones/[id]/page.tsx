@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
 import { requerirUsuario } from "@/lib/auth";
-import { listarCuentas } from "@/lib/datos/cuentas";
+import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
 import { etiquetaPeriodo, NOMBRE_PERIODO } from "@/components/riesgo/formato";
 import { claveDia } from "@/lib/zona";
@@ -47,11 +47,12 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
   let periodosSuperados: ReturnType<typeof calcularRiesgo>["incumplimientos"] = [];
   if (op.estado_operacion === "cerrada" && op.fecha_hora_salida) {
     const dia = claveDia(op.fecha_hora_salida, zona);
-    const [cuentas, historial] = await Promise.all([
+    const [cuentas, historial, retiros] = await Promise.all([
       listarCuentas(),
       listarOperaciones({ limite: 2000 }),
+      listarRetiros(),
     ]);
-    periodosSuperados = calcularRiesgo(cuentas, historial, zona).incumplimientos.filter(
+    periodosSuperados = calcularRiesgo(cuentas, historial, retiros, zona).incumplimientos.filter(
       (i) => i.cuentaId === op.account.id && i.inicio <= dia && dia <= i.fin,
     );
   }

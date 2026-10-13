@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requerirUsuario } from "@/lib/auth";
 import { obtenerZona } from "@/lib/zona-servidor";
-import { listarCuentas } from "@/lib/datos/cuentas";
+import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
 import { calcularKpis, construirEquity, ultimosDias } from "@/lib/datos/metricas";
@@ -44,9 +44,10 @@ export default async function DashboardPage({
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
   // estado actual y no deben depender de la ventana temporal elegida.
-  const [todasSinFiltrar, cuentas] = await Promise.all([
+  const [todasSinFiltrar, cuentas, retiros] = await Promise.all([
     listarOperaciones({ limite: 2000 }),
     listarCuentas(),
+    listarRetiros(),
   ]);
   const instrumentos = instrumentosUsados(todasSinFiltrar);
   const todas = filtrarPorInstrumento(todasSinFiltrar, filtro.instrumento);
@@ -59,7 +60,7 @@ export default async function DashboardPage({
 
   // El riesgo es de la cuenta, no del instrumento: usa todas las operaciones y solo
   // respeta el rango de fechas elegido.
-  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, zona, {
+  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, retiros, zona, {
     desde: filtro.desde,
     hasta: filtro.hasta,
   });

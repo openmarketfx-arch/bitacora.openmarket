@@ -17,7 +17,7 @@ import {
   parsearMes,
   rangoRejilla,
 } from "@/lib/datos/calendario";
-import { listarCuentas } from "@/lib/datos/cuentas";
+import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones, listarParaCalendario } from "@/lib/datos/operaciones";
 import { calcularRiesgo, limitesDePeriodo } from "@/lib/datos/riesgo";
 import { plural } from "@/lib/format";
@@ -38,12 +38,13 @@ export default async function CalendarioPage({
 
   // El riesgo necesita todo el historial: el saldo con el que arranca cada periodo
   // depende de lo cerrado antes. Ignora el filtro de instrumento (es de la cuenta).
-  const [delMes, cuentas, historial] = await Promise.all([
+  const [delMes, cuentas, historial, retiros] = await Promise.all([
     listarParaCalendario(inicio, fin),
     listarCuentas(),
     listarOperaciones({ limite: 2000 }),
+    listarRetiros(),
   ]);
-  const riesgo = calcularRiesgo(cuentas, historial, zona, { desde: inicio, hasta: fin });
+  const riesgo = calcularRiesgo(cuentas, historial, retiros, zona, { desde: inicio, hasta: fin });
   const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
   const rangoMes = limitesDePeriodo("mensual", `${anio}-${String(mes).padStart(2, "0")}-01`);
   const delMesRiesgo = riesgo.incumplimientos.filter(

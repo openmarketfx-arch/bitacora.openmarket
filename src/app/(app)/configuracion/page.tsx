@@ -10,7 +10,7 @@ import { PanelTags, type TagConUso } from "@/components/tags/panel-tags";
 import { requerirUsuario } from "@/lib/auth";
 import { resultadoNeto } from "@/lib/resultado";
 import { createClient } from "@/lib/supabase/server";
-import type { Instrument, Tag, TradingAccount } from "@/lib/types";
+import type { Instrument, Retiro, Tag, TradingAccount } from "@/lib/types";
 
 export const metadata = { title: "Configuración — Open Market" };
 
@@ -28,6 +28,7 @@ export default async function ConfiguracionPage() {
     { data: tradesCuenta },
     { data: tradesInstrumento },
     { data: usosTags },
+    { data: retirosCrudos },
   ] = await Promise.all([
     supabase
       .from("trading_accounts")
@@ -46,6 +47,7 @@ export default async function ConfiguracionPage() {
       .select("trading_account_id, estado_operacion, resultado_dinero, comision, swap"),
     supabase.from("trades").select("instrument_id"),
     supabase.from("trade_tags").select("tag_id"),
+    supabase.from("account_withdrawals").select("*").order("fecha_hora", { ascending: false }),
   ]);
 
   const contar = <T extends string>(filas: Record<T, string>[] | null, campo: T) => {
@@ -59,7 +61,12 @@ export default async function ConfiguracionPage() {
 
   const usoCuentas = contar(tradesCuenta, "trading_account_id");
 
-  // Saldo = capital inicial + lo que movieron las operaciones cerradas, costos incluidos.
+  const retiros = (retirosCrudos ?? []) as Retiro[];
+  const retirosDe = (cuentaId: string) => retiros.filter((r) => r.trading_account_id === cuentaId);
+  const retiradoDe = (cuentaId: string) =>
+    Math.round(retirosDe(cuentaId).reduce((s, r) => s + Number(r.monto), 0) * 100) / 100;
+
+  // Saldo = capital inicial + lo que movieron las operaciones cerradas (costos incluidos) - retiros.
   const netoPorCuenta = new Map<string, number>();
   for (const t of tradesCuenta ?? []) {
     if (t.estado_operacion !== "cerrada") continue;
@@ -74,10 +81,15 @@ export default async function ConfiguracionPage() {
   const cuentasConUso: CuentaConUso[] = ((cuentas ?? []) as TradingAccount[]).map((c) => ({
     ...c,
     operaciones: usoCuentas.get(c.id) ?? 0,
+    resultadoNeto: Math.round((netoPorCuenta.get(c.id) ?? 0) * 100) / 100,
+    retiros: retirosDe(c.id),
+    retirado: retiradoDe(c.id),
     saldo:
       c.capital_inicial === null
         ? null
-        : Math.round((Number(c.capital_inicial) + (netoPorCuenta.get(c.id) ?? 0)) * 100) / 100,
+        : Math.round(
+            (Number(c.capital_inicial) + (netoPorCuenta.get(c.id) ?? 0) - retiradoDe(c.id)) * 100,
+          ) / 100,
   }));
 
   // Los seguidos suben arriba; el resto mantiene el orden por clase y símbolo.

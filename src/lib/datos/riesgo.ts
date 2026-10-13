@@ -1,5 +1,5 @@
 import { resultadoNeto } from "@/lib/resultado";
-import type { TradeCompleto, TradingAccount } from "@/lib/types";
+import type { Retiro, TradeCompleto, TradingAccount } from "@/lib/types";
 import { claveDia, claveHoy, diaSemanaDeClave, partesDeClave, sumarDias } from "@/lib/zona";
 
 /**
@@ -10,7 +10,9 @@ import { claveDia, claveHoy, diaSemanaDeClave, partesDeClave, sumarDias } from "
  * comisiones y swaps de lo cerrado en él) es una pérdida mayor que ese %.
  *
  *  - El % se aplica sobre el saldo con que arrancó el periodo: capital inicial más
- *    el resultado neto acumulado hasta entonces.
+ *    el resultado neto acumulado hasta entonces, menos lo retirado. Así la medición
+ *    parte siempre del capital real: retirar ganancias baja la base de los límites
+ *    siguientes, pero un retiro nunca cuenta como pérdida.
  *  - Día, semana (lunes a domingo) y mes son de calendario en la zona del usuario.
  *  - Una operación cuenta en el periodo en que se cerró.
  *  - Cada periodo se evalúa por separado: dos días dentro de su límite diario
@@ -72,8 +74,10 @@ export interface RiesgoCuenta {
   cuenta: TradingAccount;
   /** Tiene capital y al menos un límite: sin eso no hay nada que medir. */
   configurada: boolean;
-  /** Capital inicial más el resultado neto de todo lo cerrado. */
+  /** Capital inicial más el resultado neto de todo lo cerrado, menos los retiros. */
   saldo: number | null;
+  /** Total retirado de la cuenta. */
+  retirado: number;
   estados: EstadoLimite[];
 }
 
@@ -134,6 +138,7 @@ const centavos = (n: number) => Math.round(n * 100) / 100;
 export function calcularRiesgo(
   cuentas: TradingAccount[],
   operaciones: TradeCompleto[],
+  retiros: Retiro[],
   zona: string,
   rango: RangoRiesgo = { desde: null, hasta: null },
 ): ResumenRiesgo {
@@ -174,6 +179,18 @@ export function calcularRiesgo(
     const dias = Array.from(netoPorDia.keys()).sort();
     const total = dias.reduce((s, d) => s + (netoPorDia.get(d) ?? 0), 0);
 
+    // Lo retirado de esta cuenta, por día. No es resultado de trading: solo mueve el saldo.
+    const retiradoPorDia = new Map<string, number>();
+    for (const r of retiros) {
+      if (r.trading_account_id !== cuenta.id) continue;
+      const dia = claveDia(r.fecha_hora, zona);
+      retiradoPorDia.set(dia, (retiradoPorDia.get(dia) ?? 0) + Number(r.monto));
+    }
+    const diasRetiro = Array.from(retiradoPorDia.keys());
+    const retirado = diasRetiro.reduce((s, d) => s + (retiradoPorDia.get(d) ?? 0), 0);
+    const retiradoAntesDe = (a: string) =>
+      diasRetiro.reduce((s, d) => (d < a ? s + (retiradoPorDia.get(d) ?? 0) : s), 0);
+
     const netoEntre = (a: string, b: string) =>
       dias.reduce((s, d) => (d >= a && d <= b ? s + (netoPorDia.get(d) ?? 0) : s), 0);
     const netoAntesDe = (a: string) =>
@@ -185,7 +202,8 @@ export function calcularRiesgo(
       resultadoCuentas.push({
         cuenta,
         configurada: false,
-        saldo: cuenta.capital_inicial === null ? null : centavos(capital + total),
+        saldo: cuenta.capital_inicial === null ? null : centavos(capital + total - retirado),
+        retirado: centavos(retirado),
         estados: [],
       });
       continue;
@@ -205,7 +223,7 @@ export function calcularRiesgo(
         porTipo[tipo].evaluados += 1;
 
         const neto = centavos(netoEntre(inicio, fin));
-        const base = centavos(capital + netoAntesDe(inicio));
+        const base = centavos(capital + netoAntesDe(inicio) - retiradoAntesDe(inicio));
         const limite = base > 0 ? centavos((pct / 100) * base) : 0;
         const perdida = neto < 0 ? -neto : 0;
 
@@ -231,7 +249,7 @@ export function calcularRiesgo(
       // Estado del periodo en que estamos hoy, aunque aún no tenga operaciones.
       const actual = limitesDePeriodo(tipo, hoy);
       const neto = centavos(netoEntre(actual.inicio, actual.fin));
-      const base = centavos(capital + netoAntesDe(actual.inicio));
+      const base = centavos(capital + netoAntesDe(actual.inicio) - retiradoAntesDe(actual.inicio));
       const limite = base > 0 ? centavos((pct / 100) * base) : 0;
       const perdida = neto < 0 ? -neto : 0;
       estados.push({
@@ -248,7 +266,13 @@ export function calcularRiesgo(
       });
     }
 
-    resultadoCuentas.push({ cuenta, configurada: true, saldo: centavos(capital + total), estados });
+    resultadoCuentas.push({
+      cuenta,
+      configurada: true,
+      saldo: centavos(capital + total - retirado),
+      retirado: centavos(retirado),
+      estados,
+    });
   }
 
   incumplimientos.sort(
