@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Clock, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +34,13 @@ export function AccionesOperacion({ operacion }: { operacion: TradeCompleto }) {
   return (
     <>
       <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" asChild>
+          <Link href={`/operaciones/${operacion.id}/editar`}>
+            <Pencil className="h-4 w-4" />
+            Editar
+          </Link>
+        </Button>
+
         {operacion.estado_operacion === "abierta" && (
           <Button size="sm" onClick={() => setCerrando(true)}>
             <Clock className="h-4 w-4" />

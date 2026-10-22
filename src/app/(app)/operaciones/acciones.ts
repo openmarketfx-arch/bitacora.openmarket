@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
 import { aPrecio } from "@/lib/format";
+import { revalidarRiesgo } from "@/lib/revalidar-riesgo";
 import { createClient } from "@/lib/supabase/server";
 import { deInputDateTime } from "@/lib/zona";
 import { obtenerZona } from "@/lib/zona-servidor";
@@ -153,6 +154,48 @@ function columnasDeMedicion(
   return { ...base, [campo]: medicionEnPrecio };
 }
 
+type DatosOperacion = z.infer<typeof esquemaOperacion>;
+type InstrumentoDeMedicion = { asset_class: "forex" | "crypto" | "index" | "stock"; valor_pip: number; decimales_precio: number };
+
+/**
+ * Todas las columnas de una operación a partir de lo que mandó el formulario.
+ * Las usan por igual crear y editar, así una operación editada cumple las mismas
+ * reglas (y los mismos constraints de la base) que una recién registrada.
+ */
+function columnasDeOperacion(d: DatosOperacion, instrumento: InstrumentoDeMedicion) {
+  const cerrada = d.desenlace === "cerrada";
+  const medicionEnPrecio = cerrada ? aPrecio(d.medicion ?? null, instrumento) : null;
+  const tipoCierre = cerrada ? (d.tipo_cierre ?? null) : null;
+
+  return {
+    trading_account_id: d.trading_account_id,
+    instrument_id: d.instrument_id,
+    // direccion no se escribe: la base la deriva de tipo_orden.
+    tipo_orden: d.tipo_orden,
+    orden_activada: activacionDe(d.tipo_orden, d.desenlace),
+    fecha_hora_entrada: new Date(d.fecha_hora_entrada).toISOString(),
+    precio_entrada: d.precio_entrada,
+    precio_tp: d.precio_tp ?? null,
+    precio_stop: d.precio_stop ?? null,
+    lotaje: d.lotaje ?? null,
+    notas: d.notas || null,
+    captura_url: d.captura_url || null,
+
+    estado_operacion: d.desenlace,
+    // Solo la columna que el constraint permite según el desenlace.
+    distancia_no_activada:
+      d.desenlace === "no_activada" ? aPrecio(d.distancia ?? null, instrumento) : null,
+    // estado_revision lo calcula el trigger a partir de estos dos campos.
+    fecha_hora_salida: cerrada ? new Date(d.fecha_hora_salida!).toISOString() : null,
+    precio_salida: cerrada ? d.precio_salida : null,
+    resultado_dinero: cerrada ? d.resultado_dinero : null,
+    comision: cerrada ? d.comision : 0,
+    swap: cerrada ? d.swap : 0,
+    tipo_cierre: tipoCierre,
+    ...columnasDeMedicion(tipoCierre, medicionEnPrecio),
+  };
+}
+
 export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion> {
   const parseado = esquemaOperacion.safeParse(await conFechasEnZona(datos));
   if (!parseado.success) {
@@ -176,40 +219,9 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
     return { ok: false, mensaje: "El instrumento elegido ya no está disponible." };
   }
 
-  const cerrada = d.desenlace === "cerrada";
-  const medicionEnPrecio = cerrada ? aPrecio(d.medicion ?? null, instrumento) : null;
-  const tipoCierre = cerrada ? (d.tipo_cierre ?? null) : null;
-
   const { data: creada, error } = await supabase
     .from("trades")
-    .insert({
-      user_id: usuario.id,
-      trading_account_id: d.trading_account_id,
-      instrument_id: d.instrument_id,
-      // direccion no se escribe: la base la deriva de tipo_orden.
-      tipo_orden: d.tipo_orden,
-      orden_activada: activacionDe(d.tipo_orden, d.desenlace),
-      fecha_hora_entrada: new Date(d.fecha_hora_entrada).toISOString(),
-      precio_entrada: d.precio_entrada,
-      precio_tp: d.precio_tp ?? null,
-      precio_stop: d.precio_stop ?? null,
-      lotaje: d.lotaje ?? null,
-      notas: d.notas || null,
-      captura_url: d.captura_url || null,
-
-      estado_operacion: d.desenlace,
-      // Solo la columna que el constraint permite según el desenlace.
-      distancia_no_activada:
-        d.desenlace === "no_activada" ? aPrecio(d.distancia ?? null, instrumento) : null,
-      // estado_revision lo calcula el trigger a partir de estos dos campos.
-      fecha_hora_salida: cerrada ? new Date(d.fecha_hora_salida!).toISOString() : null,
-      precio_salida: cerrada ? d.precio_salida : null,
-      resultado_dinero: cerrada ? d.resultado_dinero : null,
-      comision: cerrada ? d.comision : 0,
-      swap: cerrada ? d.swap : 0,
-      tipo_cierre: tipoCierre,
-      ...columnasDeMedicion(tipoCierre, medicionEnPrecio),
-    })
+    .insert({ user_id: usuario.id, ...columnasDeOperacion(d, instrumento) })
     .select("id")
     .single();
 
@@ -235,6 +247,91 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
   revalidatePath("/calendario");
   revalidatePath("/");
   return { ok: true, id: creada.id };
+}
+
+/**
+ * Edita una operación ya registrada, sea cual sea su estado: abierta, cerrada o
+ * no activada. Se puede cambiar cualquier dato, incluido cerrarla, reabrirla o
+ * cambiar de cuenta, instrumento o tipo de orden. Aplica las mismas reglas que
+ * al registrarla.
+ */
+export async function actualizarOperacion(id: string, datos: unknown): Promise<ResultadoOperacion> {
+  const parseado = esquemaOperacion.safeParse(await conFechasEnZona(datos));
+  if (!parseado.success) {
+    return { ok: false, mensaje: parseado.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  await requerirUsuario();
+  const supabase = await createClient();
+  const d = parseado.data;
+
+  // RLS limita la lectura a las operaciones del usuario: si no aparece, no es suya.
+  const { data: actual } = await supabase
+    .from("trades")
+    .select("id, captura_url, trade_tags ( tag_id )")
+    .eq("id", id)
+    .maybeSingle();
+  if (!actual) return { ok: false, mensaje: "No se encontró la operación." };
+
+  const { data: instrumento, error: errorInstrumento } = await supabase
+    .from("instruments")
+    .select("id, asset_class, valor_pip, decimales_precio")
+    .eq("id", d.instrument_id)
+    .single();
+  if (errorInstrumento || !instrumento) {
+    return { ok: false, mensaje: "El instrumento elegido ya no está disponible." };
+  }
+
+  // Los tags nuevos se añaden antes de tocar la operación y los quitados después,
+  // para que un fallo a medias no deje la operación sin sus confirmaciones.
+  const antes = new Set(
+    ((actual.trade_tags ?? []) as { tag_id: string }[]).map((t) => t.tag_id),
+  );
+  const ahora = new Set(d.tags);
+  const porAnadir = d.tags.filter((t) => !antes.has(t));
+  const porQuitar = Array.from(antes).filter((t) => !ahora.has(t));
+
+  if (porAnadir.length > 0) {
+    const { error: errorTags } = await supabase
+      .from("trade_tags")
+      .insert(porAnadir.map((tag_id) => ({ trade_id: id, tag_id })));
+    if (errorTags) {
+      return { ok: false, mensaje: `No se pudieron guardar los tags: ${errorTags.message}` };
+    }
+  }
+
+  const { error } = await supabase
+    .from("trades")
+    .update(columnasDeOperacion(d, instrumento))
+    .eq("id", id);
+
+  if (error) {
+    if (porAnadir.length > 0) {
+      await supabase.from("trade_tags").delete().eq("trade_id", id).in("tag_id", porAnadir);
+    }
+    return { ok: false, mensaje: error.message };
+  }
+
+  if (porQuitar.length > 0) {
+    const { error: errorQuitar } = await supabase
+      .from("trade_tags")
+      .delete()
+      .eq("trade_id", id)
+      .in("tag_id", porQuitar);
+    if (errorQuitar) {
+      return { ok: false, mensaje: `Se guardó la operación, pero no se pudieron quitar tags: ${errorQuitar.message}` };
+    }
+  }
+
+  // Si se cambió o quitó la captura, la anterior ya no la usa nadie.
+  const nueva = d.captura_url || null;
+  if (actual.captura_url && actual.captura_url !== nueva) {
+    await supabase.storage.from("trade-captures").remove([actual.captura_url]);
+  }
+
+  revalidarRiesgo();
+  revalidarTodo(id);
+  return { ok: true, id };
 }
 
 export interface ResultadoTag extends Resultado {

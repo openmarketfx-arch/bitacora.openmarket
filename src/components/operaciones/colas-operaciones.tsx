@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { resultadoNeto } from "@/lib/resultado";
 import Link from "next/link";
-import { CheckCircle2, ClipboardCheck, Clock } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Clock, Pencil } from "lucide-react";
 import { useZona } from "@/components/layout/proveedor-zona";
 import { DialogoCierre } from "@/components/operaciones/dialogo-cierre";
 import { DialogoRevision } from "@/components/operaciones/dialogo-revision";
@@ -194,6 +194,11 @@ function Cola({
                   tamano="md"
                 />
               )}
+              <Button variant="ghost" size="icon" asChild title="Editar" aria-label={`Editar ${op.instrument.simbolo}`}>
+                <Link href={`/operaciones/${op.id}/editar`}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
               <Button size="sm" onClick={() => onAccion(op)}>
                 {etiquetaAccion}
               </Button>

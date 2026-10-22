@@ -13,9 +13,15 @@ interface Props {
   /** Ruta dentro del bucket trade-captures, o null si no hay captura. */
   valor: string | null;
   onChange: (ruta: string | null) => void;
+  /**
+   * Si quitar la captura también borra el archivo del almacenamiento. Al editar una
+   * operación ya guardada se apaga: el archivo original lo limpia el guardado, y así
+   * cancelar la edición no deja la operación apuntando a un archivo borrado.
+   */
+  borrarAlQuitar?: boolean;
 }
 
-export function SubidorCaptura({ valor, onChange }: Props) {
+export function SubidorCaptura({ valor, onChange, borrarAlQuitar = true }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [subiendo, setSubiendo] = useState(false);
   const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
@@ -64,7 +70,7 @@ export function SubidorCaptura({ valor, onChange }: Props) {
   }
 
   async function quitar() {
-    if (valor) {
+    if (valor && borrarAlQuitar) {
       const supabase = createClient();
       await supabase.storage.from("trade-captures").remove([valor]);
     }

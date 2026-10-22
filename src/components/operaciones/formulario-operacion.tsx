@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { crearOperacion } from "@/app/(app)/operaciones/acciones";
+import { actualizarOperacion, crearOperacion } from "@/app/(app)/operaciones/acciones";
 import {
   SelectorInstrumento,
   type InstrumentoOpcion,
@@ -29,13 +30,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useZona } from "@/components/layout/proveedor-zona";
 import { CamposCostos } from "@/components/operaciones/campos-costos";
+import { aUnidades } from "@/lib/format";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
+  TIPO_CIERRE_MAP,
   TIPO_ORDEN_MAP,
   esOrdenPendiente,
   type Tag,
   type TipoCierre,
   type TipoOrden,
+  type TradeCompleto,
   type TradingAccount,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -44,38 +48,82 @@ interface Props {
   cuentas: TradingAccount[];
   instrumentos: InstrumentoOpcion[];
   tagsIniciales: Tag[];
+  /** Si viene, el formulario edita esa operación (abierta, cerrada o no activada) en vez de crear una. */
+  operacion?: TradeCompleto | null;
 }
 
-export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Props) {
+/** Número de la base de datos como texto para un input; vacío si no hay valor. */
+function texto(valor: number | string | null | undefined): string {
+  return valor === null || valor === undefined ? "" : String(Number(valor));
+}
+
+export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales, operacion }: Props) {
   const zona = useZona();
   const router = useRouter();
+  const editando = Boolean(operacion);
+
+  // En edición, la medición se guarda como diferencia de precio y el campo la pide
+  // en pips o puntos: se convierte de vuelta con el instrumento de la operación.
+  const instrumentoInicial = operacion
+    ? (instrumentos.find((i) => i.id === operacion.instrument.id) ?? operacion.instrument)
+    : null;
+  const medicionInicial = (() => {
+    if (!operacion?.tipo_cierre) return "";
+    const campo = TIPO_CIERRE_MAP[operacion.tipo_cierre].campo;
+    const valor = campo ? operacion[campo] : null;
+    return valor === null || valor === undefined
+      ? ""
+      : String(Number((aUnidades(Number(valor), instrumentoInicial) ?? 0).toFixed(4)));
+  })();
+  const distanciaInicial =
+    operacion?.distancia_no_activada != null
+      ? String(
+          Number(
+            (aUnidades(Number(operacion.distancia_no_activada), instrumentoInicial) ?? 0).toFixed(4),
+          ),
+        )
+      : "";
 
   // ---- Entrada ----
-  const [cuentaId, setCuentaId] = useState(cuentas[0]?.id ?? "");
-  const [instrumentoId, setInstrumentoId] = useState<string | null>(null);
-  const [tipoOrden, setTipoOrden] = useState<TipoOrden>("buy");
-  const [fechaEntrada, setFechaEntrada] = useState(() => paraInputDateTime(zona));
-  const [precioEntrada, setPrecioEntrada] = useState("");
-  const [precioTp, setPrecioTp] = useState("");
-  const [precioStop, setPrecioStop] = useState("");
-  const [lotaje, setLotaje] = useState("");
+  const [cuentaId, setCuentaId] = useState(operacion?.account.id ?? cuentas[0]?.id ?? "");
+  const [instrumentoId, setInstrumentoId] = useState<string | null>(
+    operacion?.instrument.id ?? null,
+  );
+  const [tipoOrden, setTipoOrden] = useState<TipoOrden>(operacion?.tipo_orden ?? "buy");
+  const [fechaEntrada, setFechaEntrada] = useState(() =>
+    paraInputDateTime(zona, operacion?.fecha_hora_entrada),
+  );
+  const [precioEntrada, setPrecioEntrada] = useState(texto(operacion?.precio_entrada));
+  const [precioTp, setPrecioTp] = useState(texto(operacion?.precio_tp));
+  const [precioStop, setPrecioStop] = useState(texto(operacion?.precio_stop));
+  const [lotaje, setLotaje] = useState(texto(operacion?.lotaje));
   const [tags, setTags] = useState<Tag[]>(tagsIniciales);
-  const [tagsElegidos, setTagsElegidos] = useState<string[]>([]);
-  const [notas, setNotas] = useState("");
-  const [captura, setCaptura] = useState<string | null>(null);
+  const [tagsElegidos, setTagsElegidos] = useState<string[]>(
+    operacion?.tags.map((t) => t.id) ?? [],
+  );
+  const [notas, setNotas] = useState(operacion?.notas ?? "");
+  const [captura, setCaptura] = useState<string | null>(operacion?.captura_url ?? null);
 
   // ---- Cierre ----
-  const [cerrando, setCerrando] = useState(false);
-  const [fechaSalida, setFechaSalida] = useState("");
-  const [precioSalida, setPrecioSalida] = useState("");
-  const [resultado, setResultado] = useState("");
-  const [comision, setComision] = useState("");
-  const [swap, setSwap] = useState("");
-  const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(null);
-  const [medicion, setMedicion] = useState("");
+  const [cerrando, setCerrando] = useState(
+    operacion ? operacion.estado_operacion !== "abierta" : false,
+  );
+  const [fechaSalida, setFechaSalida] = useState(
+    operacion?.fecha_hora_salida ? paraInputDateTime(zona, operacion.fecha_hora_salida) : "",
+  );
+  const [precioSalida, setPrecioSalida] = useState(texto(operacion?.precio_salida));
+  const [resultado, setResultado] = useState(texto(operacion?.resultado_dinero));
+  const [comision, setComision] = useState(
+    Number(operacion?.comision ?? 0) !== 0 ? texto(operacion?.comision) : "",
+  );
+  const [swap, setSwap] = useState(
+    Number(operacion?.swap ?? 0) !== 0 ? texto(operacion?.swap) : "",
+  );
+  const [tipoCierre, setTipoCierre] = useState<TipoCierre | null>(operacion?.tipo_cierre ?? null);
+  const [medicion, setMedicion] = useState(medicionInicial);
   /** Solo relevante en órdenes pendientes: si el precio llegó a tocarlas. */
-  const [seActivo, setSeActivo] = useState(true);
-  const [distanciaNoActivada, setDistanciaNoActivada] = useState("");
+  const [seActivo, setSeActivo] = useState(operacion?.orden_activada !== false);
+  const [distanciaNoActivada, setDistanciaNoActivada] = useState(distanciaInicial);
 
   const [guardando, setGuardando] = useState(false);
 
@@ -102,8 +150,12 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
     setFechaSalida("");
     setPrecioSalida("");
     setResultado("");
+    setComision("");
+    setSwap("");
     setTipoCierre(null);
     setMedicion("");
+    setSeActivo(true);
+    setDistanciaNoActivada("");
   }
 
   async function enviar(cerrar: boolean) {
@@ -120,7 +172,7 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
 
     setGuardando(true);
 
-    const resultadoAccion = await crearOperacion({
+    const datosOperacion = {
       trading_account_id: cuentaId,
       instrument_id: instrumentoId,
       tipo_orden: tipoOrden,
@@ -142,7 +194,11 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
       tipo_cierre: conSalida ? tipoCierre : null,
       medicion: conSalida && medicion !== "" ? medicion : null,
       distancia: noActivada && distanciaNoActivada !== "" ? distanciaNoActivada : null,
-    });
+    };
+
+    const resultadoAccion = operacion
+      ? await actualizarOperacion(operacion.id, datosOperacion)
+      : await crearOperacion(datosOperacion);
 
     setGuardando(false);
 
@@ -151,7 +207,9 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
       return;
     }
 
-    if (desenlace === "no_activada") {
+    if (operacion) {
+      toast.success("Cambios guardados.");
+    } else if (desenlace === "no_activada") {
       toast.success("Registrada como no activada: el precio nunca llegó a tu orden.");
     } else if (!cerrar) {
       toast.success("Operación guardada como abierta. La cierras cuando tengas el resultado.");
@@ -169,7 +227,8 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
   function alEnviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-    void enviar(submitter?.value === "cerrar");
+    // Al editar no hay "guardar como abierta" o "cerrar": se guarda tal como está el formulario.
+    void enviar(editando ? cerrando : submitter?.value === "cerrar");
   }
 
   if (cuentas.length === 0) {
@@ -362,7 +421,11 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
               <Label>
                 Captura <span className="text-muted-foreground">(opcional)</span>
               </Label>
-              <SubidorCaptura valor={captura} onChange={setCaptura} />
+              <SubidorCaptura
+                valor={captura}
+                onChange={setCaptura}
+                borrarAlQuitar={!editando || captura !== operacion?.captura_url}
+              />
             </div>
           </div>
         </CardContent>
@@ -386,7 +449,9 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
               </div>
               <Button type="button" variant="ghost" size="sm" onClick={cancelarCierre}>
                 <X className="h-4 w-4" />
-                Dejarla abierta
+                {editando && operacion?.estado_operacion !== "abierta"
+                  ? "Reabrir (quitar el cierre)"
+                  : "Dejarla abierta"}
               </Button>
             </div>
           </CardHeader>
@@ -484,39 +549,59 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales }: Pr
         </Card>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <Button
-          type="submit"
-          value="abierta"
-          variant="outline"
-          size="lg"
-          disabled={guardando}
-          className="sm:min-w-[200px]"
-        >
-          {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
-          Guardar como abierta
-        </Button>
+      {editando ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button type="button" variant="ghost" size="lg" asChild>
+            <Link href={`/operaciones/${operacion!.id}`}>Cancelar</Link>
+          </Button>
+          {!cerrando && (
+            <Button type="button" variant="outline" size="lg" onClick={abrirCierre}>
+              Añadir datos de cierre
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          )}
+          <Button type="submit" size="lg" disabled={guardando} className="sm:min-w-[200px]">
+            {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {cerrando && pendiente && !seActivo ? "Guardar como no activada" : "Guardar cambios"}
+          </Button>
+        </div>
+      ) : (
+        <>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button
+            type="submit"
+            value="abierta"
+            variant="outline"
+            size="lg"
+            disabled={guardando}
+            className="sm:min-w-[200px]"
+          >
+            {guardando && <Loader2 className="h-4 w-4 animate-spin" />}
+            Guardar como abierta
+          </Button>
 
-        <Button
-          type={cerrando ? "submit" : "button"}
-          value="cerrar"
-          size="lg"
-          disabled={guardando}
-          onClick={cerrando ? undefined : abrirCierre}
-          className="sm:min-w-[200px]"
-        >
-          {guardando && cerrando && <Loader2 className="h-4 w-4 animate-spin" />}
-          {cerrando && pendiente && !seActivo ? "Registrar como no activada" : "Cerrar operación"}
-          {!cerrando && <ChevronDown className="h-4 w-4" />}
-        </Button>
-      </div>
+          <Button
+            type={cerrando ? "submit" : "button"}
+            value="cerrar"
+            size="lg"
+            disabled={guardando}
+            onClick={cerrando ? undefined : abrirCierre}
+            className="sm:min-w-[200px]"
+          >
+            {guardando && cerrando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {cerrando && pendiente && !seActivo ? "Registrar como no activada" : "Cerrar operación"}
+            {!cerrando && <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </div>
 
-      {!cerrando && (
-        <p className="text-right text-xs text-muted-foreground">
-          &ldquo;Cerrar operación&rdquo; abre los campos de salida
-          {pendiente && " y pregunta si la orden llegó a activarse"}. Si sigue en curso,
-          guárdala como abierta y la cierras después.
-        </p>
+        {!cerrando && (
+          <p className="text-right text-xs text-muted-foreground">
+            &ldquo;Cerrar operación&rdquo; abre los campos de salida
+            {pendiente && " y pregunta si la orden llegó a activarse"}. Si sigue en curso,
+            guárdala como abierta y la cierras después.
+          </p>
+        )}
+        </>
       )}
     </form>
   );
