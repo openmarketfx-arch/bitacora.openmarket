@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatDinero } from "@/lib/format";
-import type { TradingAccount } from "@/lib/types";
+import { ETIQUETA_TIPO_CUENTA, type AccountType, type TradingAccount } from "@/lib/types";
 
 const MONEDAS = ["USD", "EUR", "GBP", "COP", "MXN", "ARS", "CLP", "PEN", "BRL", "USDT"];
 
@@ -39,7 +39,17 @@ export function DialogoCuenta({ abierto, onOpenChange, cuenta }: Props) {
 
   const [nombre, setNombre] = useState(cuenta?.nombre ?? "");
   const [moneda, setMoneda] = useState(cuenta?.moneda_base ?? "USD");
-  const [tipo, setTipo] = useState<"real" | "demo">(cuenta?.tipo ?? "real");
+  const [tipo, setTipo] = useState<AccountType>(cuenta?.tipo ?? "real");
+  // Datos de la prueba de fondeo. Los objetivos son un % del capital inicial, uno por fase.
+  const [fases, setFases] = useState(String(cuenta?.prueba_fases ?? 2));
+  const [objetivos, setObjetivos] = useState<string[]>(
+    Array.from({ length: 4 }, (_, i) => texto(cuenta?.prueba_objetivos?.[i])),
+  );
+  const [pruebaDiario, setPruebaDiario] = useState(texto(cuenta?.prueba_limite_diario));
+  const [pruebaTotal, setPruebaTotal] = useState(texto(cuenta?.prueba_limite_total));
+  const esPrueba = tipo === "prueba_fondeo";
+  const esFondeada = tipo === "fondeada";
+  const numeroFases = Math.min(4, Math.max(1, Number(fases) || 1));
   const [capital, setCapital] = useState(texto(cuenta?.capital_inicial));
   const [limiteDiario, setLimiteDiario] = useState(texto(cuenta?.limite_riesgo_diario));
   const [limiteSemanal, setLimiteSemanal] = useState(texto(cuenta?.limite_riesgo_semanal));
@@ -61,6 +71,10 @@ export function DialogoCuenta({ abierto, onOpenChange, cuenta }: Props) {
       limite_riesgo_diario: limiteDiario,
       limite_riesgo_semanal: limiteSemanal,
       limite_riesgo_mensual: limiteMensual,
+      prueba_fases: esPrueba ? fases : null,
+      prueba_objetivos: esPrueba ? objetivos.slice(0, numeroFases) : null,
+      prueba_limite_diario: esPrueba || esFondeada ? pruebaDiario : null,
+      prueba_limite_total: esPrueba || esFondeada ? pruebaTotal : null,
     };
     const resultado = cuenta
       ? await actualizarCuenta(cuenta.id, datos)
@@ -120,13 +134,22 @@ export function DialogoCuenta({ abierto, onOpenChange, cuenta }: Props) {
 
             <div className="space-y-2">
               <Label htmlFor="tipo">Tipo</Label>
-              <Select value={tipo} onValueChange={(v) => setTipo(v as "real" | "demo")}>
+              <Select
+                value={tipo}
+                onValueChange={(v) => setTipo(v as AccountType)}
+                // Fondeada no se elige: solo se llega aprobando la prueba, y de ahi no se vuelve.
+                disabled={esFondeada}
+              >
                 <SelectTrigger id="tipo">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="real">Real</SelectItem>
-                  <SelectItem value="demo">Demo</SelectItem>
+                  <SelectItem value="real">{ETIQUETA_TIPO_CUENTA.real}</SelectItem>
+                  <SelectItem value="demo">{ETIQUETA_TIPO_CUENTA.demo}</SelectItem>
+                  <SelectItem value="prueba_fondeo">{ETIQUETA_TIPO_CUENTA.prueba_fondeo}</SelectItem>
+                  {esFondeada && (
+                    <SelectItem value="fondeada">{ETIQUETA_TIPO_CUENTA.fondeada}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -151,9 +174,93 @@ export function DialogoCuenta({ abierto, onOpenChange, cuenta }: Props) {
             </p>
           </div>
 
+          {(esPrueba || esFondeada) && (
+            <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {esFondeada ? "Cuenta fondeada" : "Objetivos de la prueba de fondeo"}
+                </h3>
+                <p className="pt-0.5 text-xs text-muted-foreground">
+                  {esFondeada
+                    ? "Esta cuenta ya aprobó su prueba. Los límites de pérdida de la prueba siguen vigentes."
+                    : "Todo se mide como un % del capital inicial. Al cumplir el objetivo de cada fase se pasa a la siguiente; al aprobar la última, la cuenta pasa a ser fondeada. Si sobrepasas un límite de pérdida, la prueba se da por perdida."}
+                </p>
+              </div>
+
+              {esPrueba && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="prueba-fases">Número de fases</Label>
+                    <Select value={fases} onValueChange={setFases}>
+                      <SelectTrigger id="prueba-fases" className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4].map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n} {n === 1 ? "fase" : "fases"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {Array.from({ length: numeroFases }, (_, i) => (
+                      <CampoPorcentaje
+                        key={i}
+                        id={`objetivo-${i + 1}`}
+                        etiqueta={`Fase ${i + 1} · objetivo de ganancia`}
+                        valor={objetivos[i]}
+                        onChange={(v) =>
+                          setObjetivos((prev) => prev.map((x, j) => (j === i ? v : x)))
+                        }
+                        placeholder={i === 0 ? "8" : "5"}
+                        capital={hayCapital ? capitalNumero : null}
+                        moneda={moneda}
+                        sufijo="de ganancia"
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <CampoPorcentaje
+                  id="prueba-diario"
+                  etiqueta="Pérdida máxima diaria"
+                  valor={pruebaDiario}
+                  onChange={setPruebaDiario}
+                  placeholder="5"
+                  capital={hayCapital ? capitalNumero : null}
+                  moneda={moneda}
+                  sufijo="de pérdida"
+                />
+                <CampoPorcentaje
+                  id="prueba-total"
+                  etiqueta="Pérdida máxima total"
+                  valor={pruebaTotal}
+                  onChange={setPruebaTotal}
+                  placeholder="10"
+                  capital={hayCapital ? capitalNumero : null}
+                  moneda={moneda}
+                  sufijo="de pérdida"
+                />
+              </div>
+
+              {!hayCapital && (
+                <p className="text-xs text-amber-400">
+                  Pon el capital inicial arriba: los objetivos y límites son un % de ese capital.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3 rounded-lg border border-border p-4">
             <div>
-              <h3 className="text-sm font-semibold">Límite de pérdida</h3>
+              <h3 className="text-sm font-semibold">
+                {esPrueba || esFondeada ? "Tus límites de riesgo (opcional)" : "Límite de pérdida"}
+              </h3>
               <p className="pt-0.5 text-xs text-muted-foreground">
                 El máximo que aceptas perder, como % del saldo de la cuenta al empezar cada
                 periodo. Si lo superas cuenta como un incumplimiento de tu gestión del riesgo.
@@ -257,6 +364,59 @@ function CampoLimite({
       </div>
       <p className="min-h-[1rem] text-[11px] text-muted-foreground">
         {equivalente ? `≈ ${equivalente} sobre el capital inicial` : " "}
+      </p>
+    </div>
+  );
+}
+
+/** Un % del capital con su equivalente en dinero. Lo usan los objetivos y límites de la prueba. */
+function CampoPorcentaje({
+  id,
+  etiqueta,
+  valor,
+  onChange,
+  placeholder,
+  capital,
+  moneda,
+  sufijo,
+}: {
+  id: string;
+  etiqueta: string;
+  valor: string;
+  onChange: (valor: string) => void;
+  placeholder: string;
+  capital: number | null;
+  moneda: string;
+  sufijo: string;
+}) {
+  const pct = Number(valor.replace(",", "."));
+  const equivalente =
+    capital !== null && valor.trim() !== "" && Number.isFinite(pct) && pct > 0
+      ? formatDinero((capital * pct) / 100, moneda, { signo: false })
+      : null;
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{etiqueta}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          min="0"
+          max="100"
+          step="0.01"
+          className="pr-7 font-mono"
+          placeholder={placeholder}
+          value={valor}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+          %
+        </span>
+      </div>
+      <p className="min-h-[1rem] text-[11px] text-muted-foreground">
+        {equivalente ? `≈ ${equivalente} ${sufijo}` : "\u00a0"}
       </p>
     </div>
   );

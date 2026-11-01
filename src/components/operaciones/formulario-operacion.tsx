@@ -33,6 +33,7 @@ import { CamposCostos } from "@/components/operaciones/campos-costos";
 import { aUnidades } from "@/lib/format";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
+  ETIQUETA_TIPO_CUENTA,
   TIPO_CIERRE_MAP,
   TIPO_ORDEN_MAP,
   esOrdenPendiente,
@@ -266,7 +267,7 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales, oper
                     <SelectItem key={c.id} value={c.id}>
                       {c.nombre}
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {c.moneda_base} · {c.tipo === "real" ? "Real" : "Demo"}
+                        {c.moneda_base} · {ETIQUETA_TIPO_CUENTA[c.tipo]}
                       </span>
                     </SelectItem>
                   ))}

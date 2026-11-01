@@ -4,7 +4,17 @@
  */
 
 export type AssetClass = "forex" | "crypto" | "index" | "stock";
-export type AccountType = "real" | "demo";
+export type AccountType = "real" | "demo" | "prueba_fondeo" | "fondeada";
+
+export const ETIQUETA_TIPO_CUENTA: Record<AccountType, string> = {
+  real: "Real",
+  demo: "Demo",
+  prueba_fondeo: "Prueba de fondeo",
+  fondeada: "Fondeada",
+};
+
+/** Cómo va una prueba de fondeo. "fallida" = se sobrepasó un límite de pérdida. */
+export type EstadoPrueba = "en_curso" | "aprobada" | "fallida";
 export type Direccion = "compra" | "venta";
 export type EstadoOperacion = "abierta" | "cerrada" | "no_activada";
 export type EstadoRevision = "no_aplica" | "pendiente" | "revisado";
@@ -274,6 +284,15 @@ export interface TradingAccount {
   limite_riesgo_diario: number | null;
   limite_riesgo_semanal: number | null;
   limite_riesgo_mensual: number | null;
+  /** Solo en cuentas de prueba de fondeo y fondeadas; null en el resto. */
+  prueba_fases: number | null;
+  /** Objetivo de ganancia de cada fase, en % del capital inicial. */
+  prueba_objetivos: number[] | null;
+  /** Pérdida máxima permitida en un día y en total, en % del capital inicial. */
+  prueba_limite_diario: number | null;
+  prueba_limite_total: number | null;
+  prueba_estado: EstadoPrueba | null;
+  prueba_resuelta_en: string | null;
   created_at: string;
   updated_at: string;
 }

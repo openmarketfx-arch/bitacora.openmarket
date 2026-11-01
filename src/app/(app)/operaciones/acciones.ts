@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
 import { aPrecio } from "@/lib/format";
+import { sincronizarPruebasFondeo } from "@/lib/fondeo-servidor";
 import { revalidarRiesgo } from "@/lib/revalidar-riesgo";
 import { createClient } from "@/lib/supabase/server";
 import { deInputDateTime } from "@/lib/zona";
@@ -243,6 +244,7 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
     }
   }
 
+  await sincronizarPruebasFondeo();
   revalidatePath("/operaciones");
   revalidatePath("/calendario");
   revalidatePath("/");
@@ -329,6 +331,7 @@ export async function actualizarOperacion(id: string, datos: unknown): Promise<R
     await supabase.storage.from("trade-captures").remove([actual.captura_url]);
   }
 
+  await sincronizarPruebasFondeo();
   revalidarRiesgo();
   revalidarTodo(id);
   return { ok: true, id };
@@ -531,6 +534,7 @@ export async function cerrarOperacion(id: string, datos: unknown): Promise<Resul
 
   if (error) return { ok: false, mensaje: error.message };
 
+  await sincronizarPruebasFondeo();
   revalidarTodo(id);
   return { ok: true };
 }

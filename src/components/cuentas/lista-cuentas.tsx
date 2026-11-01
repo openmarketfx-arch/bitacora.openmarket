@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDinero, plural } from "@/lib/format";
-import type { Retiro, TradingAccount } from "@/lib/types";
+import { ETIQUETA_TIPO_CUENTA, type Retiro, type TradingAccount } from "@/lib/types";
 
 /** Cuenta + cuántas operaciones tiene, para decidir si se puede borrar. */
 export interface CuentaConUso extends TradingAccount {
@@ -126,9 +126,34 @@ export function ListaCuentas({ cuentas }: { cuentas: CuentaConUso[] }) {
                 <TableCell className="font-medium">{cuenta.nombre}</TableCell>
                 <TableCell className="font-mono text-xs">{cuenta.moneda_base}</TableCell>
                 <TableCell>
-                  <Badge variant={cuenta.tipo === "real" ? "primary" : "outline"}>
-                    {cuenta.tipo === "real" ? "Real" : "Demo"}
-                  </Badge>
+                  <div className="flex flex-col items-start gap-1">
+                    <Badge
+                      variant={
+                        cuenta.tipo === "demo"
+                          ? "outline"
+                          : cuenta.tipo === "fondeada"
+                            ? "positive"
+                            : cuenta.tipo === "prueba_fondeo"
+                              ? "warning"
+                              : "primary"
+                      }
+                    >
+                      {ETIQUETA_TIPO_CUENTA[cuenta.tipo]}
+                    </Badge>
+                    {cuenta.tipo === "prueba_fondeo" && (
+                      <span
+                        className={
+                          cuenta.prueba_estado === "fallida"
+                            ? "text-[11px] text-red-300"
+                            : "text-[11px] text-muted-foreground"
+                        }
+                      >
+                        {cuenta.prueba_estado === "fallida"
+                          ? "Prueba perdida"
+                          : `${cuenta.prueba_fases} ${cuenta.prueba_fases === 1 ? "fase" : "fases"}`}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="tabular text-right font-mono text-xs">
                   {cuenta.capital_inicial === null ? (

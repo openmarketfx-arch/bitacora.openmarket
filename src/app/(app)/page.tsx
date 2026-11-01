@@ -3,7 +3,9 @@ import { AlertTriangle, ClipboardCheck, ClipboardList, Clock, Plus } from "lucid
 import { Topbar } from "@/components/layout/topbar";
 import { CurvaEquity } from "@/components/dashboard/curva-equity";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
+import { TarjetasCapital, type CapitalCuenta } from "@/components/dashboard/tarjeta-capital";
 import { TarjetaKpi } from "@/components/dashboard/tarjeta-kpi";
+import { TarjetaFondeo } from "@/components/fondeo/tarjeta-fondeo";
 import { TiraDias } from "@/components/dashboard/tira-dias";
 import {
   AvisoConfigurarRiesgo,
@@ -17,7 +19,9 @@ import { requerirUsuario } from "@/lib/auth";
 import { obtenerZona } from "@/lib/zona-servidor";
 import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
+import { evaluarPrueba, seguirFondeada } from "@/lib/datos/fondeo";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
+import { sincronizarPruebasFondeo } from "@/lib/fondeo-servidor";
 import { calcularKpis, construirEquity, ultimosDias } from "@/lib/datos/metricas";
 import {
   filtrarOperaciones,
@@ -40,6 +44,10 @@ export default async function DashboardPage({
   const zona = await obtenerZona();
 
   const filtro = parsearFiltro(params, "30d", zona);
+
+  // Antes de leer las cuentas: si una prueba ya cumplió sus objetivos (o perdió), la cuenta
+  // cambia de tipo ahora y no en la siguiente visita.
+  await sincronizarPruebasFondeo();
 
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
@@ -66,6 +74,44 @@ export default async function DashboardPage({
   });
   const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
 
+  // El capital total de cada cuenta activa: lo que queda tras sumar y restar cada operación.
+  const capitales: CapitalCuenta[] = riesgo.cuentas
+    .filter((c) => c.cuenta.activo && c.saldo !== null)
+    .map((c) => ({
+      id: c.cuenta.id,
+      nombre: c.cuenta.nombre,
+      tipo: c.cuenta.tipo,
+      moneda: c.cuenta.moneda_base,
+      capitalInicial: Number(c.cuenta.capital_inicial),
+      saldo: c.saldo as number,
+      retirado: c.retirado,
+    }));
+
+  // Las pruebas de fondeo (y las ya fondeadas) con su avance frente a objetivos y límites.
+  const pruebas = cuentas
+    .filter((c) => c.activo && (c.tipo === "prueba_fondeo" || c.tipo === "fondeada"))
+    .map((cuenta) => ({
+      cuenta,
+      evaluacion: evaluarPrueba(cuenta, todasSinFiltrar, zona),
+      seguimiento: seguirFondeada(cuenta, todasSinFiltrar, zona),
+    }))
+    .filter((p) => p.evaluacion !== null);
+
+  const bloquesDeCuenta = (
+    <>
+      <TarjetasCapital cuentas={capitales} />
+      {pruebas.map((p) => (
+        <TarjetaFondeo
+          key={p.cuenta.id}
+          cuenta={p.cuenta}
+          evaluacion={p.evaluacion}
+          seguimiento={p.seguimiento}
+          zona={zona}
+        />
+      ))}
+    </>
+  );
+
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta").length;
   const pendientes = todas.filter((o) => o.estado_revision === "pendiente").length;
 
@@ -79,7 +125,8 @@ export default async function DashboardPage({
     return (
       <>
         <Topbar titulo="Dashboard" descripcion="Tu bitácora, en números" />
-        <main className="p-5 sm:p-8">
+        <main className="space-y-6 p-5 sm:p-8">
+          {bloquesDeCuenta}
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-20 text-center">
               <ClipboardList className="h-7 w-7 text-muted-foreground" />
@@ -108,6 +155,8 @@ export default async function DashboardPage({
       <Topbar titulo="Dashboard" descripcion="Tu bitácora, en números" />
 
       <main className="space-y-6 p-5 sm:p-8">
+        {bloquesDeCuenta}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BarraFiltros
             periodo={filtro.periodo}
