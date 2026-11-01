@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { requerirUsuario } from "@/lib/auth";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { resolverCuenta } from "@/lib/cuenta";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 import { claveHoy, partesDeClave } from "@/lib/zona";
-import { filtrarPorInstrumento, instrumentosUsados } from "@/lib/datos/filtros";
+import { filtrarPorCuenta, filtrarPorInstrumento, instrumentosUsados } from "@/lib/datos/filtros";
 import {
   construirMes,
   formatearMes,
@@ -27,7 +28,7 @@ export const metadata = { title: "Calendario — Open Market" };
 export default async function CalendarioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; instrumento?: string }>;
+  searchParams: Promise<{ mes?: string; instrumento?: string; cuenta?: string }>;
 }) {
   await requerirUsuario();
   const params = await searchParams;
@@ -38,13 +39,24 @@ export default async function CalendarioPage({
 
   // El riesgo necesita todo el historial: el saldo con el que arranca cada periodo
   // depende de lo cerrado antes. Ignora el filtro de instrumento (es de la cuenta).
-  const [delMes, cuentas, historial, retiros] = await Promise.all([
+  const [delMesTodas, cuentas, historialTodas, retiros, cuentaGuardada] = await Promise.all([
     listarParaCalendario(inicio, fin),
     listarCuentas(),
     listarOperaciones({ limite: 2000 }),
     listarRetiros(),
+    obtenerCuentaGuardada(),
   ]);
-  const riesgo = calcularRiesgo(cuentas, historial, retiros, zona, { desde: inicio, hasta: fin });
+
+  // Cada cuenta tiene su propio calendario: los días de una no se mezclan con los de otra.
+  const cuentaId = resolverCuenta(cuentas, params.cuenta, cuentaGuardada);
+  const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
+  const delMes = filtrarPorCuenta(delMesTodas, cuentaId);
+  const historial = filtrarPorCuenta(historialTodas, cuentaId);
+
+  const riesgo = calcularRiesgo(cuenta ? [cuenta] : [], historial, retiros, zona, {
+    desde: inicio,
+    hasta: fin,
+  });
   const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
   const rangoMes = limitesDePeriodo("mensual", `${anio}-${String(mes).padStart(2, "0")}-01`);
   const delMesRiesgo = riesgo.incumplimientos.filter(
@@ -91,6 +103,8 @@ export default async function CalendarioPage({
       <main className="space-y-5 p-5 sm:p-8">
         <BarraFiltros
           soloInstrumento
+          cuentas={cuentas.map((c) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, activo: c.activo }))}
+          cuenta={cuentaId}
           periodo={null}
           desde=""
           hasta=""

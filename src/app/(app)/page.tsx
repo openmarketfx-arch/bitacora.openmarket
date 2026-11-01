@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ClipboardCheck, ClipboardList, Clock, Plus } from "lucide-react";
+import { ClipboardCheck, ClipboardList, Clock, Plus } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
 import { CurvaEquity } from "@/components/dashboard/curva-equity";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
@@ -16,7 +16,8 @@ import { TablaOperaciones } from "@/components/operaciones/tabla-operaciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requerirUsuario } from "@/lib/auth";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { resolverCuenta } from "@/lib/cuenta";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
 import { evaluarPrueba, seguirFondeada } from "@/lib/datos/fondeo";
@@ -25,6 +26,7 @@ import { sincronizarPruebasFondeo } from "@/lib/fondeo-servidor";
 import { calcularKpis, construirEquity, ultimosDias } from "@/lib/datos/metricas";
 import {
   filtrarOperaciones,
+  filtrarPorCuenta,
   filtrarPorInstrumento,
   instrumentosUsados,
   parsearFiltro,
@@ -43,8 +45,6 @@ export default async function DashboardPage({
   const params = await searchParams;
   const zona = await obtenerZona();
 
-  const filtro = parsearFiltro(params, "30d", zona);
-
   // Antes de leer las cuentas: si una prueba ya cumplió sus objetivos (o perdió), la cuenta
   // cambia de tipo ahora y no en la siguiente visita.
   await sincronizarPruebasFondeo();
@@ -52,13 +52,21 @@ export default async function DashboardPage({
   // Se lee todo una vez y se recorta en memoria: el rango y el instrumento
   // afectan a los KPI y a la curva, pero las colas (abiertas, pendientes) son
   // estado actual y no deben depender de la ventana temporal elegida.
-  const [todasSinFiltrar, cuentas, retiros] = await Promise.all([
+  const [todasSinFiltrar, cuentas, retiros, cuentaGuardada] = await Promise.all([
     listarOperaciones({ limite: 2000 }),
     listarCuentas(),
     listarRetiros(),
+    obtenerCuentaGuardada(),
   ]);
-  const instrumentos = instrumentosUsados(todasSinFiltrar);
-  const todas = filtrarPorInstrumento(todasSinFiltrar, filtro.instrumento);
+
+  // Cada cuenta se ve por separado: todo lo de esta pantalla habla de UNA sola cuenta.
+  const cuentaId = resolverCuenta(cuentas, params.cuenta, cuentaGuardada);
+  const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
+  const filtro = parsearFiltro(params, "30d", zona, cuentaId);
+
+  const deLaCuenta = filtrarPorCuenta(todasSinFiltrar, cuentaId);
+  const instrumentos = instrumentosUsados(deLaCuenta);
+  const todas = filtrarPorInstrumento(deLaCuenta, filtro.instrumento);
 
   const enPeriodo = filtrarOperaciones(todasSinFiltrar, filtro);
 
@@ -66,17 +74,17 @@ export default async function DashboardPage({
   const equity = construirEquity(cerradasPeriodo, zona);
   const kpis = calcularKpis(enPeriodo, equity);
 
-  // El riesgo es de la cuenta, no del instrumento: usa todas las operaciones y solo
+  // El riesgo es de la cuenta, no del instrumento: usa todas sus operaciones y solo
   // respeta el rango de fechas elegido.
-  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, retiros, zona, {
+  const riesgo = calcularRiesgo(cuenta ? [cuenta] : [], deLaCuenta, retiros, zona, {
     desde: filtro.desde,
     hasta: filtro.hasta,
   });
   const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
 
-  // El capital total de cada cuenta activa: lo que queda tras sumar y restar cada operación.
+  // El capital total de la cuenta: lo que queda tras sumar y restar cada operación.
   const capitales: CapitalCuenta[] = riesgo.cuentas
-    .filter((c) => c.cuenta.activo && c.saldo !== null)
+    .filter((c) => c.saldo !== null)
     .map((c) => ({
       id: c.cuenta.id,
       nombre: c.cuenta.nombre,
@@ -87,13 +95,15 @@ export default async function DashboardPage({
       retirado: c.retirado,
     }));
 
-  // Las pruebas de fondeo (y las ya fondeadas) con su avance frente a objetivos y límites.
-  const pruebas = cuentas
-    .filter((c) => c.activo && (c.tipo === "prueba_fondeo" || c.tipo === "fondeada"))
-    .map((cuenta) => ({
-      cuenta,
-      evaluacion: evaluarPrueba(cuenta, todasSinFiltrar, zona),
-      seguimiento: seguirFondeada(cuenta, todasSinFiltrar, zona),
+  // Si la cuenta es una prueba de fondeo (o ya fondeada): su avance frente a objetivos y límites.
+  const pruebas = (cuenta && (cuenta.tipo === "prueba_fondeo" || cuenta.tipo === "fondeada")
+    ? [cuenta]
+    : []
+  )
+    .map((c) => ({
+      cuenta: c,
+      evaluacion: evaluarPrueba(c, deLaCuenta, zona),
+      seguimiento: seguirFondeada(c, deLaCuenta, zona),
     }))
     .filter((p) => p.evaluacion !== null);
 
@@ -112,20 +122,35 @@ export default async function DashboardPage({
     </>
   );
 
+  // El selector de cuenta va siempre, también en una cuenta sin operaciones: si no, no
+  // habría forma de cambiar a otra.
+  const barraFiltros = (
+    <BarraFiltros
+      cuentas={cuentas.map((c) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, activo: c.activo }))}
+      cuenta={cuentaId}
+      periodo={filtro.periodo}
+      desde={params.desde ?? ""}
+      hasta={params.hasta ?? ""}
+      instrumento={filtro.instrumento}
+      instrumentos={instrumentos}
+    />
+  );
+
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta").length;
   const pendientes = todas.filter((o) => o.estado_revision === "pendiente").length;
 
   const cerradasTodas = todas.filter((o) => o.estado_operacion === "cerrada");
   const dias = ultimosDias(cerradasTodas, 14, zona);
 
-  const moneda = kpis.monedas[0] ?? "USD";
+  const moneda = cuenta?.moneda_base ?? kpis.monedas[0] ?? "USD";
   const etiquetaPeriodo = filtro.etiquetaRango;
 
-  if (todasSinFiltrar.length === 0) {
+  if (deLaCuenta.length === 0) {
     return (
       <>
         <Topbar titulo="Dashboard" descripcion="Tu bitácora, en números" />
         <main className="space-y-6 p-5 sm:p-8">
+          {barraFiltros}
           {bloquesDeCuenta}
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-20 text-center">
@@ -155,23 +180,9 @@ export default async function DashboardPage({
       <Topbar titulo="Dashboard" descripcion="Tu bitácora, en números" />
 
       <main className="space-y-6 p-5 sm:p-8">
-        {bloquesDeCuenta}
+        {barraFiltros}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <BarraFiltros
-            periodo={filtro.periodo}
-            desde={params.desde ?? ""}
-            hasta={params.hasta ?? ""}
-            instrumento={filtro.instrumento}
-            instrumentos={instrumentos}
-          />
-          {kpis.monedas.length > 1 && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Hay cuentas en {kpis.monedas.join(" y ")}: los totales suman monedas distintas.
-            </span>
-          )}
-        </div>
+        {bloquesDeCuenta}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <TarjetaKpi

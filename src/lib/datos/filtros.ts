@@ -9,6 +9,7 @@ import { fechaDeClave, finDeDia, inicioDeDia } from "@/lib/zona";
 /** Parámetros de URL que entienden dashboard, analítica y calendario. */
 export interface ParametrosFiltro {
   periodo?: string;
+  cuenta?: string;
   desde?: string;
   hasta?: string;
   instrumento?: string;
@@ -21,6 +22,8 @@ export interface FiltroReporte {
   hasta: Date | null;
   /** Símbolo del instrumento, o null para todos. */
   instrumento: string | null;
+  /** La cuenta que se está viendo. Cada cuenta se analiza por separado; null = todas. */
+  cuentaId: string | null;
   /** Texto corto del rango activo, para mostrar en descripciones. */
   etiquetaRango: string;
 }
@@ -46,6 +49,7 @@ export function parsearFiltro(
   params: ParametrosFiltro,
   periodoPorDefecto: Periodo,
   zona: string,
+  cuentaId: string | null = null,
 ): FiltroReporte {
   const instrumento = params.instrumento?.trim() || null;
   const claveDesde = claveValida(params.desde);
@@ -64,6 +68,7 @@ export function parsearFiltro(
       desde: claveDesde ? inicioDeDia(claveDesde, zona) : null,
       hasta: claveHasta ? finDeDia(claveHasta, zona) : null,
       instrumento,
+      cuentaId,
       etiquetaRango,
     };
   }
@@ -77,6 +82,7 @@ export function parsearFiltro(
     desde: inicioDePeriodo(periodo, zona),
     hasta: null,
     instrumento,
+    cuentaId,
     etiquetaRango: PERIODOS.find((p) => p.valor === periodo)!.etiqueta.toLowerCase(),
   };
 }
@@ -93,11 +99,22 @@ export function filtrarPorInstrumento(
   return instrumento ? operaciones.filter((o) => o.instrument.simbolo === instrumento) : operaciones;
 }
 
+/** Solo las operaciones de una cuenta. Sin cuenta (null) las deja todas. */
+export function filtrarPorCuenta(
+  operaciones: TradeCompleto[],
+  cuentaId: string | null,
+): TradeCompleto[] {
+  return cuentaId ? operaciones.filter((o) => o.account.id === cuentaId) : operaciones;
+}
+
 export function filtrarOperaciones(
   operaciones: TradeCompleto[],
   filtro: FiltroReporte,
 ): TradeCompleto[] {
-  return filtrarPorInstrumento(operaciones, filtro.instrumento).filter((o) => {
+  return filtrarPorInstrumento(
+    filtrarPorCuenta(operaciones, filtro.cuentaId),
+    filtro.instrumento,
+  ).filter((o) => {
     const f = fechaDe(o);
     if (filtro.desde && f < filtro.desde) return false;
     if (filtro.hasta && f > filtro.hasta) return false;

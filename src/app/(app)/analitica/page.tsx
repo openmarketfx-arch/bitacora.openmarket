@@ -27,9 +27,11 @@ import {
 } from "@/components/riesgo/panel-riesgo";
 import { fraseMasIncumplido } from "@/components/riesgo/formato";
 import { requerirUsuario } from "@/lib/auth";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { resolverCuenta } from "@/lib/cuenta";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 import {
   filtrarOperaciones,
+  filtrarPorCuenta,
   instrumentosUsados,
   parsearFiltro,
   type ParametrosFiltro,
@@ -66,24 +68,33 @@ export default async function AnaliticaPage({
   const params = await searchParams;
   const zona = await obtenerZona();
 
-  const filtro = parsearFiltro(params, "todo", zona);
-  const [todasSinFiltrar, cuentas, retiros] = await Promise.all([
+  const [todasSinFiltrar, cuentas, retiros, cuentaGuardada] = await Promise.all([
     listarOperaciones({ limite: 2000 }),
     listarCuentas(),
     listarRetiros(),
+    obtenerCuentaGuardada(),
   ]);
-  const instrumentos = instrumentosUsados(todasSinFiltrar);
+
+  // Cada cuenta se analiza por separado: mezclarlas daría estadísticas sin sentido.
+  const cuentaId = resolverCuenta(cuentas, params.cuenta, cuentaGuardada);
+  const cuenta = cuentas.find((c) => c.id === cuentaId) ?? null;
+  const filtro = parsearFiltro(params, "todo", zona, cuentaId);
+  const deLaCuenta = filtrarPorCuenta(todasSinFiltrar, cuentaId);
+
+  const instrumentos = instrumentosUsados(deLaCuenta);
   const todas = filtrarOperaciones(todasSinFiltrar, filtro);
   // El riesgo es de la cuenta: ignora el instrumento y solo respeta las fechas.
-  const riesgo = calcularRiesgo(cuentas, todasSinFiltrar, retiros, zona, {
+  const riesgo = calcularRiesgo(cuenta ? [cuenta] : [], deLaCuenta, retiros, zona, {
     desde: filtro.desde,
     hasta: filtro.hasta,
   });
   const riesgoMedible = riesgo.cuentas.some((c) => c.configurada);
-  const hayHistorial = todasSinFiltrar.some((o) => o.estado_operacion === "cerrada");
+  const hayHistorial = deLaCuenta.some((o) => o.estado_operacion === "cerrada");
 
   const barra = (
     <BarraFiltros
+      cuentas={cuentas.map((c) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, activo: c.activo }))}
+      cuenta={cuentaId}
       periodo={filtro.periodo}
       desde={params.desde ?? ""}
       hasta={params.hasta ?? ""}
@@ -120,7 +131,7 @@ export default async function AnaliticaPage({
   const porHora = analizarPorHora(cerradas, zona);
   const hallazgo = peorLectura(cruce);
 
-  const moneda = cerradas[0]?.account.moneda_base ?? "USD";
+  const moneda = cuenta?.moneda_base ?? cerradas[0]?.account.moneda_base ?? "USD";
   const mejorTag = porTag[0];
   const peorTag = porTag.length > 1 ? porTag[porTag.length - 1] : null;
 
@@ -129,7 +140,7 @@ export default async function AnaliticaPage({
       <>
         <Topbar titulo="Analítica" descripcion="Qué funciona y qué te está costando dinero" />
         <main className="space-y-6 p-5 sm:p-8">
-          {hayHistorial && barra}
+          {barra}
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-20 text-center">
               <LineChart className="h-7 w-7 text-muted-foreground" />

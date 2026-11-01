@@ -2,10 +2,22 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
+import { COOKIE_CUENTA } from "@/lib/cuenta";
 import { PERIODOS } from "@/lib/datos/metricas";
+import { ETIQUETA_TIPO_CUENTA, type AccountType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+export interface CuentaOpcion {
+  id: string;
+  nombre: string;
+  tipo: AccountType;
+  activo: boolean;
+}
+
 interface Props {
+  /** Las cuentas entre las que se puede elegir y la que se está viendo. */
+  cuentas?: CuentaOpcion[];
+  cuenta?: string | null;
   /** Periodo activo; null cuando hay un rango personalizado. */
   periodo: string | null;
   desde: string;
@@ -20,6 +32,8 @@ const CAMPO =
   "h-8 rounded-md border border-input bg-background/60 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring";
 
 export function BarraFiltros({
+  cuentas = [],
+  cuenta = null,
   periodo,
   desde,
   hasta,
@@ -41,11 +55,37 @@ export function BarraFiltros({
     router.push(consulta ? `${pathname}?${consulta}` : pathname, { scroll: false });
   }
 
+  // Elegir cuenta cambia de qué cuenta hablan TODAS las pantallas de análisis, no solo esta:
+  // por eso se recuerda en una cookie además de ir en la URL.
+  function elegirCuenta(id: string) {
+    document.cookie = `${COOKIE_CUENTA}=${encodeURIComponent(id)}; path=/; max-age=31536000; SameSite=Lax`;
+    aplicar({ cuenta: id });
+  }
+
   const hayRango = !!(desde || hasta);
   const hayFiltros = hayRango || !!instrumento;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
+      {cuentas.length > 0 && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-medium uppercase tracking-wide">Cuenta</span>
+          <select
+            aria-label="Cuenta"
+            value={cuenta ?? ""}
+            onChange={(e) => elegirCuenta(e.target.value)}
+            className={cn(CAMPO, "h-9 max-w-[16rem] border-primary/40 bg-primary/5 font-medium text-foreground")}
+          >
+            {cuentas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre} · {ETIQUETA_TIPO_CUENTA[c.tipo]}
+                {c.activo ? "" : " (inactiva)"}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {!soloInstrumento && (
         <>
           <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
