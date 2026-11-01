@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarraFiltros } from "@/components/filtros/barra-filtros";
 import { requerirUsuario } from "@/lib/auth";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { resolverCuenta } from "@/lib/cuenta";
+import { listarCuentas } from "@/lib/datos/cuentas";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 import {
   filtrarOperaciones,
+  filtrarPorCuenta,
   instrumentosUsados,
   parsearFiltro,
   type ParametrosFiltro,
@@ -28,8 +31,11 @@ export default async function OperacionesPage({
 
   // Una sola lectura: las colas y los filtros se resuelven en memoria, que sale
   // más barato que un viaje a la base por cada combinación.
-  const filtro = parsearFiltro(params, "todo", zona);
-  const sinFiltrar = await listarOperaciones({ limite: 500 });
+  // Cada cuenta es independiente: la lista muestra solo las operaciones de la cuenta elegida.
+  const [cuentas, cuentaGuardada] = await Promise.all([listarCuentas(), obtenerCuentaGuardada()]);
+  const cuenta = resolverCuenta(cuentas, params.cuenta, cuentaGuardada);
+  const filtro = parsearFiltro(params, "todo", zona, cuenta);
+  const sinFiltrar = filtrarPorCuenta(await listarOperaciones({ limite: 500 }), cuenta);
   const todas = filtrarOperaciones(sinFiltrar, filtro);
   const abiertas = todas.filter((o) => o.estado_operacion === "abierta");
   const pendientes = todas.filter((o) => o.estado_revision === "pendiente");
@@ -42,9 +48,11 @@ export default async function OperacionesPage({
       />
 
       <main className="p-5 sm:p-8">
-        {sinFiltrar.length > 0 && (
+        {cuentas.length > 0 && (
           <div className="mb-5">
             <BarraFiltros
+              cuentas={cuentas}
+              cuenta={cuenta}
               periodo={filtro.periodo}
               desde={params.desde ?? ""}
               hasta={params.hasta ?? ""}

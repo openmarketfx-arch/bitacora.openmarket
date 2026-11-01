@@ -1,10 +1,17 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { COOKIE_CUENTA } from "@/lib/cuenta";
 
 /** Rutas accesibles sin sesión iniciada. */
 const RUTAS_PUBLICAS = ["/login", "/registro", "/recuperar", "/auth"];
 
 export async function actualizarSesion(request: NextRequest) {
+  // Un enlace con ?cuenta=<id> deja esa cuenta como la recordada: así el menú, la lista de
+  // operaciones y el resto de pantallas hablan de la misma cuenta que la página abierta.
+  const cuentaUrl = request.nextUrl.searchParams.get("cuenta");
+  const cuentaValida = cuentaUrl && /^[0-9a-f-]{36}$/i.test(cuentaUrl) ? cuentaUrl : null;
+  if (cuentaValida) request.cookies.set(COOKIE_CUENTA, cuentaValida);
+
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,6 +55,14 @@ export async function actualizarSesion(request: NextRequest) {
     destino.pathname = "/";
     destino.search = "";
     return NextResponse.redirect(destino);
+  }
+
+  if (cuentaValida) {
+    response.cookies.set(COOKIE_CUENTA, cuentaValida, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
   }
 
   return response;

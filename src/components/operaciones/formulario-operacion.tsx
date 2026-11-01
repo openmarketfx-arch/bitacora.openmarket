@@ -30,6 +30,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useZona } from "@/components/layout/proveedor-zona";
 import { CamposCostos } from "@/components/operaciones/campos-costos";
+import { AlertaLimiteSuperado } from "@/components/riesgo/panel-riesgo";
+import type { ResumenRiesgo } from "@/lib/datos/riesgo";
 import { aUnidades } from "@/lib/format";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
@@ -51,6 +53,10 @@ interface Props {
   tagsIniciales: Tag[];
   /** Si viene, el formulario edita esa operación (abierta, cerrada o no activada) en vez de crear una. */
   operacion?: TradeCompleto | null;
+  /** Cuenta que se está viendo en la app: es la que viene elegida al crear. */
+  cuentaInicial?: string | null;
+  /** Riesgo de las cuentas: se avisa solo el de la cuenta elegida en el formulario. */
+  riesgo?: ResumenRiesgo;
 }
 
 /** Número de la base de datos como texto para un input; vacío si no hay valor. */
@@ -58,7 +64,14 @@ function texto(valor: number | string | null | undefined): string {
   return valor === null || valor === undefined ? "" : String(Number(valor));
 }
 
-export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales, operacion }: Props) {
+export function FormularioOperacion({
+  cuentas,
+  instrumentos,
+  tagsIniciales,
+  operacion,
+  cuentaInicial = null,
+  riesgo,
+}: Props) {
   const zona = useZona();
   const router = useRouter();
   const editando = Boolean(operacion);
@@ -86,7 +99,10 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales, oper
       : "";
 
   // ---- Entrada ----
-  const [cuentaId, setCuentaId] = useState(operacion?.account.id ?? cuentas[0]?.id ?? "");
+  const [cuentaId, setCuentaId] = useState(
+    operacion?.account.id ??
+      (cuentas.some((c) => c.id === cuentaInicial) ? cuentaInicial! : (cuentas[0]?.id ?? "")),
+  );
   const [instrumentoId, setInstrumentoId] = useState<string | null>(
     operacion?.instrument.id ?? null,
   );
@@ -249,6 +265,11 @@ export function FormularioOperacion({ cuentas, instrumentos, tagsIniciales, oper
 
   return (
     <form onSubmit={alEnviar} className="space-y-6">
+      {riesgo && (
+        <AlertaLimiteSuperado
+          riesgo={{ ...riesgo, cuentas: riesgo.cuentas.filter((c) => c.cuenta.id === cuentaId) }}
+        />
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Entrada</CardTitle>

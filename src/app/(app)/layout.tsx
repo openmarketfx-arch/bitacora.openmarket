@@ -3,14 +3,19 @@ import { MenuUsuario } from "@/components/layout/menu-usuario";
 import { FijarZona, ProveedorZona } from "@/components/layout/proveedor-zona";
 import { Sidebar } from "@/components/layout/sidebar";
 import { requerirUsuario } from "@/lib/auth";
+import { resolverCuenta } from "@/lib/cuenta";
+import { listarCuentas } from "@/lib/datos/cuentas";
 import { contarPorEstado } from "@/lib/datos/operaciones";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const usuario = await requerirUsuario();
   const email = usuario.email ?? "";
-  const { pendientes } = await contarPorEstado();
   const zona = await obtenerZona();
+
+  // El contador del menú es de la cuenta que se está viendo, no un total de todas.
+  const [cuentas, cuentaGuardada] = await Promise.all([listarCuentas(), obtenerCuentaGuardada()]);
+  const { pendientes } = await contarPorEstado(resolverCuenta(cuentas, null, cuentaGuardada));
 
   return (
     <ProveedorZona zona={zona}>

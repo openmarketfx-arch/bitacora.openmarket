@@ -115,19 +115,27 @@ export async function obtenerOperacion(id: string): Promise<TradeCompleto | null
   return normalizar(data as unknown as FilaCruda);
 }
 
-/** Conteos para los badges de navegación y los KPIs del dashboard. */
-export async function contarPorEstado(): Promise<{ abiertas: number; pendientes: number }> {
+/**
+ * Conteos para los badges de navegación. Con `cuentaId` cuentan solo esa cuenta: cada
+ * cuenta es independiente y no se muestran totales de todas juntas.
+ */
+export async function contarPorEstado(
+  cuentaId: string | null = null,
+): Promise<{ abiertas: number; pendientes: number }> {
   const supabase = await createClient();
 
+  const consulta = (columna: "estado_operacion" | "estado_revision", valor: string) => {
+    let c = supabase
+      .from("trades")
+      .select("id", { count: "exact", head: true })
+      .eq(columna, valor);
+    if (cuentaId) c = c.eq("trading_account_id", cuentaId);
+    return c;
+  };
+
   const [abiertas, pendientes] = await Promise.all([
-    supabase
-      .from("trades")
-      .select("id", { count: "exact", head: true })
-      .eq("estado_operacion", "abierta"),
-    supabase
-      .from("trades")
-      .select("id", { count: "exact", head: true })
-      .eq("estado_revision", "pendiente"),
+    consulta("estado_operacion", "abierta"),
+    consulta("estado_revision", "pendiente"),
   ]);
 
   return { abiertas: abiertas.count ?? 0, pendientes: pendientes.count ?? 0 };

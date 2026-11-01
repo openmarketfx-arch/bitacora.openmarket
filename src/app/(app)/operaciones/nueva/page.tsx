@@ -4,12 +4,12 @@ import { FormularioOperacion } from "@/components/operaciones/formulario-operaci
 import type { InstrumentoOpcion } from "@/components/operaciones/selector-instrumento";
 import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
-import { AlertaLimiteSuperado } from "@/components/riesgo/panel-riesgo";
 import { requerirUsuario } from "@/lib/auth";
 import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
-import { obtenerZona } from "@/lib/zona-servidor";
+import { resolverCuenta } from "@/lib/cuenta";
+import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
 import { createClient } from "@/lib/supabase/server";
 import type { Instrument, Tag, TradingAccount } from "@/lib/types";
 
@@ -33,12 +33,15 @@ export default async function NuevaOperacionPage() {
     ]);
 
   // Si ya se pasó de un límite en el periodo actual, se avisa antes de abrir otra.
-  const [todasCuentas, historial, retiros] = await Promise.all([
+  // El aviso sale por cuenta: el formulario muestra el de la cuenta que se elija.
+  const [todasCuentas, historial, retiros, cuentaGuardada] = await Promise.all([
     listarCuentas(),
     listarOperaciones({ limite: 2000 }),
     listarRetiros(),
+    obtenerCuentaGuardada(),
   ]);
   const riesgo = calcularRiesgo(todasCuentas, historial, retiros, zona);
+  const cuentaInicial = resolverCuenta(todasCuentas, null, cuentaGuardada);
 
   const idsSeguidos = new Set((seguidos ?? []).map((s) => s.instrument_id as string));
 
@@ -63,8 +66,9 @@ export default async function NuevaOperacionPage() {
       />
 
       <main className="mx-auto max-w-4xl space-y-5 p-5 sm:p-8">
-        <AlertaLimiteSuperado riesgo={riesgo} />
         <FormularioOperacion
+          cuentaInicial={cuentaInicial}
+          riesgo={riesgo}
           cuentas={(cuentas ?? []) as TradingAccount[]}
           instrumentos={opciones}
           tagsIniciales={(tags ?? []) as Tag[]}
