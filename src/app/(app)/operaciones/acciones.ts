@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerConfigPlanAlterno } from "@/lib/datos/plan-alterno";
 import { aPrecio } from "@/lib/format";
+import { PLANES, conflictoDePlan, etiquetaPlan, type OperacionDePlan, type Plan } from "@/lib/plan-alterno";
 import { sincronizarPruebasFondeo } from "@/lib/fondeo-servidor";
 import { revalidarRiesgo } from "@/lib/revalidar-riesgo";
 import { createClient } from "@/lib/supabase/server";
@@ -87,9 +89,21 @@ const esquemaOperacion = z
     medicion: z.coerce.number().min(0).nullable().optional(),
     /** Pips que le faltaron al precio para tocar una orden no activada. */
     distancia: z.coerce.number().min(0).nullable().optional(),
+
+    /** Plan alterno de la entrada (A a E) y la operación con la que se enlaza. */
+    plan: z.enum(PLANES).nullable().optional(),
+    vinculada_a: z.string().uuid().nullable().optional(),
   })
   .superRefine((d, ctx) => {
     const pendiente = esOrdenPendiente(d.tipo_orden);
+
+    if (d.vinculada_a && !d.plan) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Para enlazar la operación elige primero su plan.",
+        path: ["plan"],
+      });
+    }
 
     if (d.desenlace === "no_activada" && !pendiente) {
       ctx.addIssue({
@@ -197,6 +211,87 @@ function columnasDeOperacion(d: DatosOperacion, instrumento: InstrumentoDeMedici
   };
 }
 
+type ClienteSupabase = Awaited<ReturnType<typeof createClient>>;
+
+type PlanResuelto =
+  | { ok: true; plan: Plan | null; grupo: string | null; raiz: string | null }
+  | { ok: false; mensaje: string };
+
+/**
+ * Valida el plan de la entrada y su enlace con otras operaciones, y decide el grupo.
+ * Reglas: el plan tiene que estar habilitado en Configuración, solo se enlazan operaciones
+ * de la misma cuenta que tengan plan, y un plan no se repite dentro del grupo.
+ * `raiz` es la operación a la que hay que crearle su grupo (la primera de la cadena).
+ */
+async function resolverPlan(
+  supabase: ClienteSupabase,
+  d: DatosOperacion,
+  propia: { id: string; plan: string | null } | null,
+): Promise<PlanResuelto> {
+  const plan = (d.plan ?? null) as Plan | null;
+  if (!plan) return { ok: true, plan: null, grupo: null, raiz: null };
+
+  // Una operación que ya tenía ese plan lo conserva aunque luego se haya deshabilitado.
+  if (propia?.plan !== plan) {
+    const config = await obtenerConfigPlanAlterno();
+    if (!config.habilitado || !config.planes.includes(plan)) {
+      return { ok: false, mensaje: `${etiquetaPlan(plan)} no está habilitado en Configuración.` };
+    }
+  }
+
+  if (!d.vinculada_a) return { ok: true, plan, grupo: null, raiz: null };
+  if (d.vinculada_a === propia?.id) {
+    return { ok: false, mensaje: "Una operación no puede enlazarse consigo misma." };
+  }
+
+  const { data: destino } = await supabase
+    .from("trades")
+    .select("id, trading_account_id, plan, grupo_plan_id")
+    .eq("id", d.vinculada_a)
+    .maybeSingle();
+
+  if (!destino) return { ok: false, mensaje: "No se encontró la operación con la que enlazar." };
+  if (destino.trading_account_id !== d.trading_account_id) {
+    return { ok: false, mensaje: "Solo se pueden enlazar operaciones de la misma cuenta." };
+  }
+  if (!destino.plan) {
+    return { ok: false, mensaje: "La operación elegida no tiene plan, así que no puede formar un grupo." };
+  }
+
+  const grupo = (destino.grupo_plan_id ?? destino.id) as string;
+  const { data: delGrupo } = await supabase
+    .from("trades")
+    .select("id, plan, grupo_plan_id")
+    .eq("grupo_plan_id", grupo);
+
+  const miembros = new Map<string, OperacionDePlan>();
+  miembros.set(destino.id, {
+    id: destino.id,
+    plan: destino.plan as Plan,
+    grupo_plan_id: destino.grupo_plan_id,
+  });
+  for (const m of (delGrupo ?? []) as OperacionDePlan[]) miembros.set(m.id, m);
+
+  const conflicto = conflictoDePlan(plan, Array.from(miembros.values()), propia?.id ?? null);
+  if (conflicto) return { ok: false, mensaje: conflicto };
+
+  return { ok: true, plan, grupo, raiz: destino.grupo_plan_id ? null : destino.id };
+}
+
+/** La primera operación de una cadena pasa a ser el identificador común del grupo. */
+async function abrirGrupo(supabase: ClienteSupabase, raiz: string | null) {
+  if (!raiz) return;
+  await supabase.from("trades").update({ grupo_plan_id: raiz }).eq("id", raiz);
+}
+
+/** Mensaje claro cuando la base rechaza un plan repetido en el grupo (carrera entre dos altas). */
+function mensajeDeError(error: { code?: string; message: string }): string {
+  if (error.code === "23505" && error.message.includes("trades_grupo_plan_key")) {
+    return "Ese plan ya está en el grupo de operaciones enlazadas. No se puede repetir.";
+  }
+  return error.message;
+}
+
 export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion> {
   const parseado = esquemaOperacion.safeParse(await conFechasEnZona(datos));
   if (!parseado.success) {
@@ -220,14 +315,23 @@ export async function crearOperacion(datos: unknown): Promise<ResultadoOperacion
     return { ok: false, mensaje: "El instrumento elegido ya no está disponible." };
   }
 
+  const planResuelto = await resolverPlan(supabase, d, null);
+  if (!planResuelto.ok) return planResuelto;
+  await abrirGrupo(supabase, planResuelto.raiz);
+
   const { data: creada, error } = await supabase
     .from("trades")
-    .insert({ user_id: usuario.id, ...columnasDeOperacion(d, instrumento) })
+    .insert({
+      user_id: usuario.id,
+      ...columnasDeOperacion(d, instrumento),
+      plan: planResuelto.plan,
+      grupo_plan_id: planResuelto.grupo,
+    })
     .select("id")
     .single();
 
   if (error || !creada) {
-    return { ok: false, mensaje: error?.message ?? "No se pudo guardar la operación." };
+    return { ok: false, mensaje: error ? mensajeDeError(error) : "No se pudo guardar la operación." };
   }
 
   if (d.tags.length > 0) {
@@ -270,7 +374,7 @@ export async function actualizarOperacion(id: string, datos: unknown): Promise<R
   // RLS limita la lectura a las operaciones del usuario: si no aparece, no es suya.
   const { data: actual } = await supabase
     .from("trades")
-    .select("id, captura_url, trade_tags ( tag_id )")
+    .select("id, captura_url, plan, trade_tags ( tag_id )")
     .eq("id", id)
     .maybeSingle();
   if (!actual) return { ok: false, mensaje: "No se encontró la operación." };
@@ -283,6 +387,10 @@ export async function actualizarOperacion(id: string, datos: unknown): Promise<R
   if (errorInstrumento || !instrumento) {
     return { ok: false, mensaje: "El instrumento elegido ya no está disponible." };
   }
+
+  const planResuelto = await resolverPlan(supabase, d, { id, plan: actual.plan as string | null });
+  if (!planResuelto.ok) return planResuelto;
+  await abrirGrupo(supabase, planResuelto.raiz);
 
   // Los tags nuevos se añaden antes de tocar la operación y los quitados después,
   // para que un fallo a medias no deje la operación sin sus confirmaciones.
@@ -304,14 +412,18 @@ export async function actualizarOperacion(id: string, datos: unknown): Promise<R
 
   const { error } = await supabase
     .from("trades")
-    .update(columnasDeOperacion(d, instrumento))
+    .update({
+      ...columnasDeOperacion(d, instrumento),
+      plan: planResuelto.plan,
+      grupo_plan_id: planResuelto.grupo,
+    })
     .eq("id", id);
 
   if (error) {
     if (porAnadir.length > 0) {
       await supabase.from("trade_tags").delete().eq("trade_id", id).in("tag_id", porAnadir);
     }
-    return { ok: false, mensaje: error.message };
+    return { ok: false, mensaje: mensajeDeError(error) };
   }
 
   if (porQuitar.length > 0) {

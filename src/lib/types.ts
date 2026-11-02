@@ -3,6 +3,8 @@
  * Reflejan 1:1 los enums y tablas de supabase/migrations/0001_schema.sql.
  */
 
+import type { Plan } from "@/lib/plan-alterno";
+
 export type AssetClass = "forex" | "crypto" | "index" | "stock";
 export type AccountType = "real" | "demo" | "prueba_fondeo" | "fondeada";
 
@@ -384,6 +386,12 @@ export interface Trade {
   devuelto_precio: number | null;
   notas: string | null;
   captura_url: string | null;
+  /** Código de referencia correlativo por usuario (lo asigna la base). */
+  numero: number;
+  /** Plan alterno al que pertenece la entrada (A a E), si usa planes. */
+  plan: Plan | null;
+  /** Común a las operaciones enlazadas entre sí; null si no está enlazada. */
+  grupo_plan_id: string | null;
   created_at: string;
   updated_at: string;
 }

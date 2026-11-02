@@ -6,8 +6,10 @@ import {
   PanelInstrumentos,
   type InstrumentoConEstado,
 } from "@/components/instrumentos/panel-instrumentos";
+import { PanelPlanAlterno } from "@/components/plan-alterno/panel-plan-alterno";
 import { PanelTags, type TagConUso } from "@/components/tags/panel-tags";
 import { requerirUsuario } from "@/lib/auth";
+import { obtenerConfigPlanAlterno } from "@/lib/datos/plan-alterno";
 import { resultadoNeto } from "@/lib/resultado";
 import { createClient } from "@/lib/supabase/server";
 import type { Instrument, Retiro, Tag, TradingAccount } from "@/lib/types";
@@ -17,6 +19,7 @@ export const metadata = { title: "Configuración — Open Market" };
 export default async function ConfiguracionPage() {
   await requerirUsuario();
   const supabase = await createClient();
+  const configPlan = await obtenerConfigPlanAlterno();
 
   // RLS recorta cada consulta al usuario de la sesión. instruments incluye
   // además el catálogo del sistema (user_id null), visible para todos.
@@ -110,7 +113,7 @@ export default async function ConfiguracionPage() {
     <>
       <Topbar
         titulo="Configuración"
-        descripcion="Cuentas de trading, instrumentos y biblioteca de tags"
+        descripcion="Cuentas de trading, instrumentos, tags y plan alterno"
         acciones={<span />}
       />
 
@@ -128,6 +131,14 @@ export default async function ConfiguracionPage() {
             <TabsTrigger value="tags">
               Tags
               <span className="text-xs text-muted-foreground">{tagsConUso.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="plan-alterno">
+              Plan alterno
+              {configPlan.habilitado && (
+                <span className="rounded-full bg-primary/20 px-1.5 text-[10px] font-semibold text-primary">
+                  {configPlan.planes.length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -151,6 +162,14 @@ export default async function ConfiguracionPage() {
             <Card>
               <CardContent className="pt-5">
                 <PanelTags tags={tagsConUso} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="plan-alterno">
+            <Card>
+              <CardContent className="pt-5">
+                <PanelPlanAlterno config={configPlan} />
               </CardContent>
             </Card>
           </TabsContent>

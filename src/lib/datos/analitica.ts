@@ -1,4 +1,5 @@
 import { aUnidades, pipsEntre, unidadDe, type UnidadMedida } from "@/lib/format";
+import { PLANES, type Plan } from "@/lib/plan-alterno";
 import { resultadoNeto } from "@/lib/resultado";
 import { partesEnZona } from "@/lib/zona";
 import {
@@ -552,3 +553,119 @@ export function analizarPlanificacion(cerradas: TradeCompleto[]): PlanPorInstrum
     })
     .sort((a, b) => b.operaciones - a.operaciones);
 }
+
+// ---------- Por plan alterno ----------
+
+export interface FilaPlan extends Rendimiento {
+  plan: Plan;
+  /** Operaciones de este plan que terminaron en stop por cacería. */
+  cacerias: number;
+  /** Operaciones ya clasificadas: la base sobre la que se mide la cacería. */
+  clasificadas: number;
+}
+
+/** Rendimiento de cada plan (A a E), en el orden de los planes y solo los que tienen operaciones. */
+export function analizarPorPlan(cerradas: TradeCompleto[]): FilaPlan[] {
+  return PLANES.map((plan) => {
+    const ops = cerradas.filter((o) => o.plan === plan);
+    const clasificadas = ops.filter((o) => o.tipo_cierre !== null);
+    return {
+      plan,
+      ...medirRendimiento(ops),
+      cacerias: clasificadas.filter((o) => o.tipo_cierre === "stop_caceria").length,
+      clasificadas: clasificadas.length,
+    };
+  }).filter((f) => f.operaciones > 0);
+}
+
+/** Un grupo de operaciones enlazadas entre sí, ordenadas por hora de entrada. */
+export interface SecuenciaPlan {
+  grupoId: string;
+  operaciones: TradeCompleto[];
+  /** Los planes en el orden en que se tomaron: "A → B". */
+  patron: string;
+  plTotal: number;
+  /** El plan anterior cayó por cacería y uno posterior ganó. */
+  cacheriaYRecuperacion: boolean;
+}
+
+export interface PatronSecuencia {
+  patron: string;
+  grupos: number;
+  /** Grupos que en conjunto terminaron en positivo. */
+  positivos: number;
+  plTotal: number;
+}
+
+export interface ResumenSecuencias {
+  secuencias: SecuenciaPlan[];
+  porPatron: PatronSecuencia[];
+  /** Grupos en los que alguna entrada cayó por cacería. */
+  gruposConCaceria: number;
+  /** De esos, en cuántos una entrada posterior del grupo ganó: el stop fue cazado y el nivel acabó funcionando. */
+  cacheriaRecuperada: number;
+}
+
+/**
+ * Las entradas enlazadas, vistas como secuencias. Responde a la pregunta que justifica el
+ * plan alterno: si el Plan A cae por cacería y el Plan B gana justo después, la lectura era
+ * buena y lo que falló fue el stop, así que se puede corregir para evitar la cacería.
+ * Solo cuentan los grupos con al menos dos operaciones cerradas.
+ */
+export function analizarSecuencias(cerradas: TradeCompleto[]): ResumenSecuencias {
+  const porGrupo = new Map<string, TradeCompleto[]>();
+  for (const op of cerradas) {
+    if (!op.grupo_plan_id || !op.plan) continue;
+    const lista = porGrupo.get(op.grupo_plan_id);
+    if (lista) lista.push(op);
+    else porGrupo.set(op.grupo_plan_id, [op]);
+  }
+
+  const secuencias: SecuenciaPlan[] = [];
+  for (const [grupoId, ops] of porGrupo) {
+    if (ops.length < 2) continue;
+    const ordenadas = [...ops].sort((a, b) => a.fecha_hora_entrada.localeCompare(b.fecha_hora_entrada));
+
+    const cacheriaYRecuperacion = ordenadas.some(
+      (op, i) =>
+        op.tipo_cierre === "stop_caceria" &&
+        ordenadas.slice(i + 1).some((siguiente) => (resultadoNeto(siguiente) ?? 0) > 0),
+    );
+
+    secuencias.push({
+      grupoId,
+      operaciones: ordenadas,
+      patron: ordenadas.map((o) => o.plan).join(" → "),
+      plTotal: ordenadas.reduce((s, o) => s + (resultadoNeto(o) ?? 0), 0),
+      cacheriaYRecuperacion,
+    });
+  }
+
+  const patrones = new Map<string, PatronSecuencia>();
+  for (const sec of secuencias) {
+    const actual = patrones.get(sec.patron) ?? { patron: sec.patron, grupos: 0, positivos: 0, plTotal: 0 };
+    actual.grupos += 1;
+    actual.plTotal += sec.plTotal;
+    if (sec.plTotal > 0) actual.positivos += 1;
+    patrones.set(sec.patron, actual);
+  }
+
+  const conCaceria = secuencias.filter((s) => s.operaciones.some((o) => o.tipo_cierre === "stop_caceria"));
+
+  return {
+    secuencias: secuencias.sort((a, b) =>
+      b.operaciones[0].fecha_hora_entrada.localeCompare(a.operaciones[0].fecha_hora_entrada),
+    ),
+    porPatron: Array.from(patrones.values()).sort((a, b) => b.grupos - a.grupos || b.plTotal - a.plTotal),
+    gruposConCaceria: conCaceria.length,
+    cacheriaRecuperada: conCaceria.filter((s) => s.cacheriaYRecuperacion).length,
+  };
+}
+
+/** El plan con mejor expectativa entre los que tienen al menos `minimo` operaciones. */
+export function mejorPlan(filas: FilaPlan[], minimo = 3): FilaPlan | null {
+  const validas = filas.filter((f) => f.operaciones >= minimo && f.expectativa !== null);
+  if (validas.length === 0) return null;
+  return validas.reduce((a, b) => ((b.expectativa ?? 0) > (a.expectativa ?? 0) ? b : a));
+}
+

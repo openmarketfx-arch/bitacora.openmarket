@@ -5,6 +5,7 @@ import { resultadoNeto } from "@/lib/resultado";
 import Link from "next/link";
 import { CheckCircle2, ClipboardCheck, Clock, Pencil } from "lucide-react";
 import { useZona } from "@/components/layout/proveedor-zona";
+import { BotonDuplicar, type CuentaDestino } from "@/components/operaciones/boton-duplicar";
 import { DialogoCierre } from "@/components/operaciones/dialogo-cierre";
 import { DialogoRevision } from "@/components/operaciones/dialogo-revision";
 import { EtiquetaTipoOrden } from "@/components/operaciones/selector-tipo-orden";
@@ -21,9 +22,11 @@ interface Props {
   todas: TradeCompleto[];
   abiertas: TradeCompleto[];
   pendientes: TradeCompleto[];
+  /** Cuentas a las que se puede duplicar una operación. */
+  cuentas: CuentaDestino[];
 }
 
-export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
+export function ColasOperaciones({ todas, abiertas, pendientes, cuentas }: Props) {
   const zona = useZona();
   const [cerrando, setCerrando] = useState<TradeCompleto | null>(null);
   const [revisando, setRevisando] = useState<TradeCompleto | null>(null);
@@ -57,7 +60,7 @@ export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
         <TabsContent value="todas">
           <Card>
             <CardContent className="pt-5">
-              <TablaOperaciones operaciones={todas} zona={zona} />
+              <TablaOperaciones operaciones={todas} zona={zona} cuentas={cuentas} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -71,6 +74,7 @@ export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
             descripcion="Posiciones sin resultado final. Al cerrarlas se completan de una vez todos los datos que faltan."
             etiquetaAccion="Cerrar y finalizar"
             onAccion={setCerrando}
+            cuentas={cuentas}
           />
         </TabsContent>
 
@@ -83,6 +87,7 @@ export function ColasOperaciones({ todas, abiertas, pendientes }: Props) {
             descripcion="Cerradas pero sin clasificar. Hasta que no les pongas tipo de cierre, no cuentan en la analítica."
             etiquetaAccion="Clasificar"
             onAccion={setRevisando}
+            cuentas={cuentas}
           />
         </TabsContent>
       </Tabs>
@@ -103,7 +108,9 @@ function Cola({
   descripcion,
   etiquetaAccion,
   onAccion,
+  cuentas,
 }: {
+  cuentas: CuentaDestino[];
   operaciones: TradeCompleto[];
   icono: typeof Clock;
   vacioTitulo: string;
@@ -194,6 +201,7 @@ function Cola({
                   tamano="md"
                 />
               )}
+              <BotonDuplicar operacion={op} cuentas={cuentas} />
               <Button variant="ghost" size="icon" asChild title="Editar" aria-label={`Editar ${op.instrument.simbolo}`}>
                 <Link href={`/operaciones/${op.id}/editar`}>
                   <Pencil className="h-3.5 w-3.5" />

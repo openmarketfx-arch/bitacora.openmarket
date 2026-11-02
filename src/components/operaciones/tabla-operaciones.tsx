@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { resultadoNeto } from "@/lib/resultado";
+import { BotonDuplicar, type CuentaDestino } from "@/components/operaciones/boton-duplicar";
 import { EtiquetaTipoOrden } from "@/components/operaciones/selector-tipo-orden";
 import { Badge } from "@/components/ui/badge";
 import { CifraResultado } from "@/components/ui/cifra-resultado";
@@ -12,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatFechaHora, formatPrecio } from "@/lib/format";
+import { codigoOperacion } from "@/lib/plan-alterno";
 import { TIPO_CIERRE_MAP, type TradeCompleto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -19,11 +21,14 @@ export function TablaOperaciones({
   operaciones,
   zona,
   vacio = "Todavía no hay operaciones.",
+  cuentas = [],
 }: {
   operaciones: TradeCompleto[];
   /** Zona horaria del usuario, para mostrar las horas. */
   zona: string;
   vacio?: string;
+  /** Cuentas a las que se puede duplicar una operación; sin ellas no hay icono de duplicar. */
+  cuentas?: CuentaDestino[];
 }) {
   if (operaciones.length === 0) {
     return (
@@ -37,6 +42,7 @@ export function TablaOperaciones({
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead>Ref.</TableHead>
           <TableHead>Estado</TableHead>
           <TableHead>Entrada</TableHead>
           <TableHead>Instrumento</TableHead>
@@ -46,6 +52,7 @@ export function TablaOperaciones({
           <TableHead className="text-right">Resultado</TableHead>
           <TableHead>Cierre</TableHead>
           <TableHead>Confirmaciones</TableHead>
+          <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -54,6 +61,22 @@ export function TablaOperaciones({
 
           return (
             <TableRow key={op.id}>
+              <TableCell className="whitespace-nowrap">
+                <div className="tabular font-mono text-[11px] text-muted-foreground">
+                  {codigoOperacion(op.numero)}
+                </div>
+                {op.plan && (
+                  <Badge
+                    variant={op.grupo_plan_id ? "primary" : "outline"}
+                    className="mt-0.5 px-1.5 py-0 text-[10px]"
+                    title={op.grupo_plan_id ? "Enlazada con otras operaciones del plan" : undefined}
+                  >
+                    Plan {op.plan}
+                    {op.grupo_plan_id ? " ⛓" : ""}
+                  </Badge>
+                )}
+              </TableCell>
+
               <TableCell>
                 {op.estado_operacion === "abierta" ? (
                   <Badge variant="primary">Abierta</Badge>
@@ -130,6 +153,10 @@ export function TablaOperaciones({
                     ))}
                   </div>
                 )}
+              </TableCell>
+
+              <TableCell className="text-right">
+                <BotonDuplicar operacion={op} cuentas={cuentas} />
               </TableCell>
             </TableRow>
           );

@@ -7,6 +7,7 @@ import type { InstrumentoOpcion } from "@/components/operaciones/selector-instru
 import { Button } from "@/components/ui/button";
 import { requerirUsuario } from "@/lib/auth";
 import { obtenerOperacion } from "@/lib/datos/operaciones";
+import { listarCandidatasEnlace, obtenerConfigPlanAlterno } from "@/lib/datos/plan-alterno";
 import { createClient } from "@/lib/supabase/server";
 import { TIPO_ORDEN_MAP, type Instrument, type Tag, type TradingAccount } from "@/lib/types";
 
@@ -33,6 +34,10 @@ export default async function EditarOperacionPage({
       supabase.from("user_instruments").select("instrument_id"),
     ]);
 
+  const [configPlan, candidatasEnlace] = await Promise.all([
+    obtenerConfigPlanAlterno(),
+    listarCandidatasEnlace(),
+  ]);
   const idsSeguidos = new Set((seguidos ?? []).map((s) => s.instrument_id as string));
   const opciones: InstrumentoOpcion[] = ((instrumentos ?? []) as Instrument[]).map((i) => ({
     ...i,
@@ -60,6 +65,8 @@ export default async function EditarOperacionPage({
           instrumentos={opciones}
           tagsIniciales={(tags ?? []) as Tag[]}
           operacion={operacion}
+          configPlan={configPlan}
+          candidatasEnlace={candidatasEnlace}
         />
       </main>
     </>

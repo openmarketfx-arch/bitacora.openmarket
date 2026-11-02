@@ -353,7 +353,7 @@ export default async function DashboardPage({
             </div>
           </CardHeader>
           <CardContent>
-            <TablaOperaciones operaciones={todas.slice(0, 8)} zona={zona} />
+            <TablaOperaciones operaciones={todas.slice(0, 8)} zona={zona} cuentas={cuentas} />
           </CardContent>
         </Card>
       </main>

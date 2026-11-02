@@ -32,7 +32,16 @@ import { useZona } from "@/components/layout/proveedor-zona";
 import { CamposCostos } from "@/components/operaciones/campos-costos";
 import { AlertaLimiteSuperado } from "@/components/riesgo/panel-riesgo";
 import type { ResumenRiesgo } from "@/lib/datos/riesgo";
-import { aUnidades } from "@/lib/format";
+import { aUnidades, formatFechaHora } from "@/lib/format";
+import {
+  codigoOperacion,
+  conflictoDePlan,
+  etiquetaPlan,
+  miembrosDelGrupo,
+  type ConfigPlanAlterno,
+  type OperacionDePlan,
+  type Plan,
+} from "@/lib/plan-alterno";
 import { deInputDateTime, paraInputDateTime } from "@/lib/zona";
 import {
   ETIQUETA_TIPO_CUENTA,
@@ -57,7 +66,22 @@ interface Props {
   cuentaInicial?: string | null;
   /** Riesgo de las cuentas: se avisa solo el de la cuenta elegida en el formulario. */
   riesgo?: ResumenRiesgo;
+  /** Plan alterno del usuario: si está activo, el formulario deja elegir el plan de la entrada. */
+  configPlan?: ConfigPlanAlterno;
+  /** Operaciones con plan a las que se puede enlazar esta entrada (se filtran por cuenta). */
+  candidatasEnlace?: CandidataEnlace[];
 }
+
+/** Una operación con plan, a la que otra entrada del mismo plan de entradas puede enlazarse. */
+export interface CandidataEnlace extends OperacionDePlan {
+  numero: number;
+  cuentaId: string;
+  simbolo: string;
+  fecha: string;
+}
+
+const SIN_PLAN = "ninguno";
+const SIN_ENLACE = "ninguno";
 
 /** Número de la base de datos como texto para un input; vacío si no hay valor. */
 function texto(valor: number | string | null | undefined): string {
@@ -71,6 +95,8 @@ export function FormularioOperacion({
   operacion,
   cuentaInicial = null,
   riesgo,
+  configPlan,
+  candidatasEnlace = [],
 }: Props) {
   const zona = useZona();
   const router = useRouter();
@@ -118,6 +144,15 @@ export function FormularioOperacion({
   const [tagsElegidos, setTagsElegidos] = useState<string[]>(
     operacion?.tags.map((t) => t.id) ?? [],
   );
+  const [plan, setPlan] = useState<Plan | null>(operacion?.plan ?? null);
+  // Al editar, la operación ya enlazada se muestra elegida: otra del mismo grupo.
+  const [vinculadaA, setVinculadaA] = useState<string | null>(
+    operacion?.grupo_plan_id
+      ? (candidatasEnlace.find(
+          (c) => c.grupo_plan_id === operacion.grupo_plan_id && c.id !== operacion.id,
+        )?.id ?? null)
+      : null,
+  );
   const [notas, setNotas] = useState(operacion?.notas ?? "");
   const [captura, setCaptura] = useState<string | null>(operacion?.captura_url ?? null);
 
@@ -157,6 +192,27 @@ export function FormularioOperacion({
       ).toFixed(instrumento.decimales_precio)
     : "0.00000";
 
+  // Enlazar solo tiene sentido con operaciones de la misma cuenta.
+  const enlazables = candidatasEnlace.filter(
+    (c) => c.cuentaId === cuentaId && c.id !== operacion?.id,
+  );
+  const destinoEnlace = enlazables.find((c) => c.id === vinculadaA) ?? null;
+  const conflictoPlan =
+    plan && destinoEnlace
+      ? conflictoDePlan(plan, miembrosDelGrupo(destinoEnlace, candidatasEnlace), operacion?.id ?? null)
+      : null;
+  // Se ofrece el plan que ya tiene la operación aunque se haya deshabilitado después.
+  const planesElegibles = Array.from(
+    new Set([...(configPlan?.planes ?? []), ...(operacion?.plan ? [operacion.plan] : [])]),
+  ).sort();
+  const mostrarPlan = Boolean(configPlan?.habilitado || operacion?.plan);
+
+  function cambiarCuenta(id: string) {
+    setCuentaId(id);
+    // Un enlace de la cuenta anterior ya no vale en la nueva.
+    setVinculadaA(null);
+  }
+
   function abrirCierre() {
     setCerrando(true);
     if (!fechaSalida) setFechaSalida(paraInputDateTime(zona));
@@ -180,6 +236,10 @@ export function FormularioOperacion({
       toast.error("Elige un instrumento.");
       return;
     }
+    if (conflictoPlan) {
+      toast.error(conflictoPlan);
+      return;
+    }
 
     // Concluir una orden pendiente que nunca se activó no es un cierre: no
     // hay salida ni resultado, solo el dato de que el precio no llegó.
@@ -201,6 +261,8 @@ export function FormularioOperacion({
       notas,
       captura_url: captura,
       tags: tagsElegidos,
+      plan,
+      vinculada_a: plan ? vinculadaA : null,
 
       desenlace,
       fecha_hora_salida: conSalida ? deInputDateTime(fechaSalida, zona) : "",
@@ -279,7 +341,7 @@ export function FormularioOperacion({
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cuenta">Cuenta</Label>
-              <Select value={cuentaId} onValueChange={setCuentaId}>
+              <Select value={cuentaId} onValueChange={cambiarCuenta}>
                 <SelectTrigger id="cuenta">
                   <SelectValue />
                 </SelectTrigger>
@@ -311,6 +373,77 @@ export function FormularioOperacion({
             <Label>Tipo de orden</Label>
             <SelectorTipoOrden valor={tipoOrden} onChange={setTipoOrden} />
           </div>
+
+          {mostrarPlan && (
+            <div className="space-y-3 rounded-md border border-border bg-muted/20 p-4">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="plan">
+                    Plan de la entrada <span className="text-muted-foreground">(opcional)</span>
+                  </Label>
+                  <Select
+                    value={plan ?? SIN_PLAN}
+                    onValueChange={(v) => {
+                      const siguiente = v === SIN_PLAN ? null : (v as Plan);
+                      setPlan(siguiente);
+                      if (!siguiente) setVinculadaA(null);
+                    }}
+                  >
+                    <SelectTrigger id="plan">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SIN_PLAN}>Sin plan</SelectItem>
+                      {planesElegibles.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {etiquetaPlan(p)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {plan && (
+                  <div className="space-y-2">
+                    <Label htmlFor="enlace">
+                      Enlazar con otra entrada{" "}
+                      <span className="text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Select
+                      value={vinculadaA ?? SIN_ENLACE}
+                      onValueChange={(v) => setVinculadaA(v === SIN_ENLACE ? null : v)}
+                    >
+                      <SelectTrigger id="enlace">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SIN_ENLACE}>Sin enlace</SelectItem>
+                        {enlazables.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {codigoOperacion(c.numero)} · {c.plan ? etiquetaPlan(c.plan) : ""} ·{" "}
+                            {c.simbolo}
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {formatFechaHora(c.fecha, zona)}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {conflictoPlan ? (
+                <p className="text-xs text-red-400">{conflictoPlan}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {plan
+                    ? "Enlázala con la entrada anterior del mismo plan de entradas (en esta cuenta) para analizar cómo funciona cada plan. Un mismo plan no puede repetirse dentro de un grupo enlazado."
+                    : "Marca a qué plan pertenece esta entrada para medir cuál funciona mejor."}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-5 sm:grid-cols-3">
             <div className="space-y-2">

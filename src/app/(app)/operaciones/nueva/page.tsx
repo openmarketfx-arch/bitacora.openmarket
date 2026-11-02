@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { requerirUsuario } from "@/lib/auth";
 import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { listarOperaciones } from "@/lib/datos/operaciones";
+import { listarCandidatasEnlace, obtenerConfigPlanAlterno } from "@/lib/datos/plan-alterno";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
 import { resolverCuenta } from "@/lib/cuenta";
 import { obtenerCuentaGuardada, obtenerZona } from "@/lib/zona-servidor";
@@ -34,12 +35,15 @@ export default async function NuevaOperacionPage() {
 
   // Si ya se pasó de un límite en el periodo actual, se avisa antes de abrir otra.
   // El aviso sale por cuenta: el formulario muestra el de la cuenta que se elija.
-  const [todasCuentas, historial, retiros, cuentaGuardada] = await Promise.all([
-    listarCuentas(),
-    listarOperaciones({ limite: 2000 }),
-    listarRetiros(),
-    obtenerCuentaGuardada(),
-  ]);
+  const [todasCuentas, historial, retiros, cuentaGuardada, configPlan, candidatasEnlace] =
+    await Promise.all([
+      listarCuentas(),
+      listarOperaciones({ limite: 2000 }),
+      listarRetiros(),
+      obtenerCuentaGuardada(),
+      obtenerConfigPlanAlterno(),
+      listarCandidatasEnlace(),
+    ]);
   const riesgo = calcularRiesgo(todasCuentas, historial, retiros, zona);
   const cuentaInicial = resolverCuenta(todasCuentas, null, cuentaGuardada);
 
@@ -69,6 +73,8 @@ export default async function NuevaOperacionPage() {
         <FormularioOperacion
           cuentaInicial={cuentaInicial}
           riesgo={riesgo}
+          configPlan={configPlan}
+          candidatasEnlace={candidatasEnlace}
           cuentas={(cuentas ?? []) as TradingAccount[]}
           instrumentos={opciones}
           tagsIniciales={(tags ?? []) as Tag[]}

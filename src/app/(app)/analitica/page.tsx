@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ClipboardCheck, LineChart } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
 import { PanelCruce } from "@/components/analitica/panel-cruce";
+import { PanelPlanes } from "@/components/analitica/panel-planes";
 import { PanelPorTag } from "@/components/analitica/panel-por-tag";
 import {
   MedicionesDeCierre,
@@ -44,7 +45,9 @@ import {
   analizarDisciplina,
   analizarPorDiaSemana,
   analizarPorHora,
+  analizarPorPlan,
   analizarPorTag,
+  analizarSecuencias,
   analizarPorTipoCierre,
   analizarPlanificacion,
   analizarPorTipoOrden,
@@ -108,6 +111,8 @@ export default async function AnaliticaPage({
 
   const porTag = analizarPorTag(cerradas);
   const grupos = agruparTags(porTag);
+  const porPlan = analizarPorPlan(cerradas);
+  const secuencias = analizarSecuencias(cerradas);
   const porOrden = analizarPorTipoOrden(todas);
   const resumenPendientes = resumirOrdenesPendientes(porOrden);
 
@@ -283,6 +288,12 @@ export default async function AnaliticaPage({
         <Tabs defaultValue={params.vista === "riesgo" ? "riesgo" : "tags"}>
           <TabsList>
             <TabsTrigger value="tags">Por confirmación</TabsTrigger>
+            <TabsTrigger value="planes">
+              Por plan
+              {porPlan.length > 0 && (
+                <span className="text-xs text-muted-foreground">{porPlan.length}</span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="ordenes">Por tipo de orden</TabsTrigger>
             <TabsTrigger value="cierres">Por tipo de cierre</TabsTrigger>
             <TabsTrigger value="pips">Pips</TabsTrigger>
@@ -334,6 +345,22 @@ export default async function AnaliticaPage({
                   titulo="Zona de stop"
                   descripcion="Cómo definiste dónde te sacaba el mercado."
                 />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="planes">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Rendimiento por plan alterno</CardTitle>
+                <CardDescription>
+                  Qué plan de entrada funciona mejor y cómo se encadenan. Si el Plan A cae por
+                  cacería y el Plan B gana justo después, la lectura era buena y lo que hay que
+                  corregir es el stop.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PanelPlanes filas={porPlan} resumen={secuencias} moneda={moneda} />
               </CardContent>
             </Card>
           </TabsContent>

@@ -13,6 +13,7 @@ import { listarCuentas, listarRetiros } from "@/lib/datos/cuentas";
 import { calcularRiesgo } from "@/lib/datos/riesgo";
 import { etiquetaPeriodo, NOMBRE_PERIODO } from "@/components/riesgo/formato";
 import { claveDia } from "@/lib/zona";
+import { codigoOperacion, etiquetaPlan } from "@/lib/plan-alterno";
 import { listarOperaciones, obtenerOperacion } from "@/lib/datos/operaciones";
 import {
   calcularPlan,
@@ -42,6 +43,14 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
 
   const op = await obtenerOperacion((await params).id);
   if (!op) notFound();
+
+  // Las demás cuentas (para duplicar) y las operaciones enlazadas en el mismo plan de entradas.
+  const cuentas = await listarCuentas();
+  const enlazadas = op.grupo_plan_id
+    ? (await listarOperaciones({ limite: 2000 }))
+        .filter((o) => o.grupo_plan_id === op.grupo_plan_id && o.id !== op.id)
+        .sort((a, b) => a.fecha_hora_entrada.localeCompare(b.fecha_hora_entrada))
+    : [];
 
   // ¿Cerró en un día, semana o mes en que se superó el límite de pérdida de su cuenta?
   let periodosSuperados: ReturnType<typeof calcularRiesgo>["incumplimientos"] = [];
@@ -86,7 +95,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
     <>
       <Topbar
         titulo={`${op.instrument.simbolo} · ${TIPO_ORDEN_MAP[op.tipo_orden].etiqueta}`}
-        descripcion={`${op.account.nombre} · ${formatFechaHora(op.fecha_hora_entrada, zona)}`}
+        descripcion={`${codigoOperacion(op.numero)} · ${op.account.nombre} · ${formatFechaHora(op.fecha_hora_entrada, zona)}`}
         acciones={
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
@@ -95,7 +104,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
                 <span className="hidden sm:inline">Volver</span>
               </Link>
             </Button>
-            <AccionesOperacion operacion={op} />
+            <AccionesOperacion operacion={op} cuentas={cuentas} />
           </div>
         }
       />
@@ -112,6 +121,7 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
             <Badge variant="outline">Revisada</Badge>
           )}
           {cierre && <Badge variant="default">{cierre.etiqueta}</Badge>}
+          {op.plan && <Badge variant="primary">{etiquetaPlan(op.plan)}</Badge>}
           <CifraResultado
             monto={resultadoNeto(op)}
             moneda={op.account.moneda_base}
@@ -119,6 +129,46 @@ export default async function OperacionPage({ params }: { params: Promise<{ id: 
             className="ml-auto"
           />
         </div>
+
+        {enlazadas.length > 0 && op.plan && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Plan de entradas enlazado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm">
+                {[op, ...enlazadas]
+                  .sort((a, b) => a.fecha_hora_entrada.localeCompare(b.fecha_hora_entrada))
+                  .map((o) => (
+                    <li key={o.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <Badge variant={o.id === op.id ? "primary" : "outline"}>
+                        {o.plan ? etiquetaPlan(o.plan) : "—"}
+                      </Badge>
+                      {o.id === op.id ? (
+                        <span className="font-mono text-xs">{codigoOperacion(o.numero)} (esta)</span>
+                      ) : (
+                        <Link
+                          href={`/operaciones/${o.id}`}
+                          className="font-mono text-xs hover:text-primary hover:underline"
+                        >
+                          {codigoOperacion(o.numero)}
+                        </Link>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {o.instrument.simbolo} · {formatFechaHora(o.fecha_hora_entrada, zona)}
+                      </span>
+                      <CifraResultado
+                        monto={resultadoNeto(o)}
+                        moneda={o.account.moneda_base}
+                        tamano="sm"
+                        className="ml-auto"
+                      />
+                    </li>
+                  ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {periodosSuperados.length > 0 && (
           <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200/90">

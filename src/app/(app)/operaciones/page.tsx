@@ -88,7 +88,12 @@ export default async function OperacionesPage({
             </CardContent>
           </Card>
         ) : (
-          <ColasOperaciones todas={todas} abiertas={abiertas} pendientes={pendientes} />
+          <ColasOperaciones
+            todas={todas}
+            abiertas={abiertas}
+            pendientes={pendientes}
+            cuentas={cuentas}
+          />
         )}
       </main>
     </>

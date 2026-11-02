@@ -6,13 +6,20 @@ import { useRouter } from "next/navigation";
 import { ClipboardCheck, Clock, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { eliminarOperacion } from "@/app/(app)/operaciones/acciones";
+import { BotonDuplicar, type CuentaDestino } from "@/components/operaciones/boton-duplicar";
 import { DialogoCierre } from "@/components/operaciones/dialogo-cierre";
 import { DialogoRevision } from "@/components/operaciones/dialogo-revision";
 import { Button } from "@/components/ui/button";
 import { DialogoConfirmacion } from "@/components/ui/dialogo-confirmacion";
 import type { TradeCompleto } from "@/lib/types";
 
-export function AccionesOperacion({ operacion }: { operacion: TradeCompleto }) {
+export function AccionesOperacion({
+  operacion,
+  cuentas = [],
+}: {
+  operacion: TradeCompleto;
+  cuentas?: CuentaDestino[];
+}) {
   const router = useRouter();
   const [cerrando, setCerrando] = useState(false);
   const [revisando, setRevisando] = useState(false);
@@ -40,6 +47,8 @@ export function AccionesOperacion({ operacion }: { operacion: TradeCompleto }) {
             Editar
           </Link>
         </Button>
+
+        <BotonDuplicar operacion={operacion} cuentas={cuentas} conTexto />
 
         {operacion.estado_operacion === "abierta" && (
           <Button size="sm" onClick={() => setCerrando(true)}>
