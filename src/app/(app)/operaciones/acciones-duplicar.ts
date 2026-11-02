@@ -26,7 +26,7 @@ export interface ResultadoDuplicado extends ResultadoOperacion {
 }
 
 /**
- * Duplica una operación en otras cuentas, varias a la vez. Cada copia es una operación
+ * Duplica una operación en una o varias cuentas a la vez, incluida la de origen. Cada copia es una operación
  * nueva e independiente, con su propio número de referencia: se copian los datos de la
  * entrada, los tags y, si se pide, el cierre. No se copian la captura (borrar una operación
  * borra su archivo) ni el enlace con el grupo de planes, porque ese grupo es de una cuenta.
@@ -49,10 +49,8 @@ export async function duplicarOperacion(id: string, datos: unknown): Promise<Res
     .maybeSingle();
   if (!origen) return { ok: false, mensaje: "No se encontró la operación." };
 
-  const destinos = Array.from(new Set(cuentas)).filter((c) => c !== origen.trading_account_id);
-  if (destinos.length === 0) {
-    return { ok: false, mensaje: "Elige una cuenta distinta a la de la operación original." };
-  }
+  // Vale cualquier cuenta activa, también la de la operación original.
+  const destinos = Array.from(new Set(cuentas));
 
   const { data: cuentasValidas } = await supabase
     .from("trading_accounts")

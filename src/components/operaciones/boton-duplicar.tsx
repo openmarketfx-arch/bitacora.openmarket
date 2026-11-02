@@ -29,7 +29,7 @@ type Modo = "completa" | "entrada";
 
 interface Props {
   operacion: TradeCompleto;
-  /** Todas las cuentas del usuario; aquí se descartan la de origen y las desactivadas. */
+  /** Todas las cuentas del usuario; aquí se descartan las desactivadas. */
   cuentas: CuentaDestino[];
   /** Con texto, el botón es normal; sin él, solo el icono. */
   conTexto?: boolean;
@@ -38,9 +38,8 @@ interface Props {
 /** El icono de duplicar y el diálogo para elegir en qué cuentas se copia. */
 export function BotonDuplicar({ operacion, cuentas, conTexto = false }: Props) {
   const [abierto, setAbierto] = useState(false);
-  const otras = cuentas.filter((c) => c.activo && c.id !== operacion.account.id);
+  const otras = cuentas.filter((c) => c.activo);
 
-  // Sin otra cuenta a la que copiar, el botón no tiene sentido.
   if (otras.length === 0) return null;
 
   return (
@@ -48,8 +47,8 @@ export function BotonDuplicar({ operacion, cuentas, conTexto = false }: Props) {
       <Button
         variant={conTexto ? "outline" : "ghost"}
         size={conTexto ? "sm" : "icon"}
-        title="Duplicar en otras cuentas"
-        aria-label={`Duplicar ${operacion.instrument.simbolo} en otras cuentas`}
+        title="Duplicar"
+        aria-label={`Duplicar ${operacion.instrument.simbolo}`}
         onClick={() => setAbierto(true)}
       >
         <Copy className="h-3.5 w-3.5" />
@@ -114,7 +113,8 @@ function DialogoDuplicar({
           <DialogTitle>Duplicar operación</DialogTitle>
           <DialogDescription>
             {operacion.instrument.simbolo} de {operacion.account.nombre}. Elige en qué cuentas
-            quieres crear una copia; cada una será una operación independiente.
+            quieres crear una copia, también puede ser la misma; cada una será una operación
+            independiente.
           </DialogDescription>
         </DialogHeader>
 
@@ -148,7 +148,12 @@ function DialogoDuplicar({
                       checked={elegidas.has(c.id)}
                       onChange={() => alternar(c.id)}
                     />
-                    <span className="min-w-0 flex-1 truncate">{c.nombre}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {c.nombre}
+                      {c.id === operacion.account.id && (
+                        <span className="text-muted-foreground"> (cuenta actual)</span>
+                      )}
+                    </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {c.moneda_base} · {ETIQUETA_TIPO_CUENTA[c.tipo]}
                     </span>
