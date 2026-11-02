@@ -23,10 +23,32 @@ export function etiquetaPlan(plan: Plan): string {
   return `Plan ${plan}`;
 }
 
-/** Código de referencia de una operación: el número correlativo con ceros a la izquierda. */
+/** Cuántas operaciones lleva cada prefijo: del 000001 al 999999. */
+export const OPERACIONES_POR_PREFIJO = 999_999;
+
+/** Prefijos posibles: A…Z y luego AA…ZZ. */
+const TOTAL_PREFIJOS = 26 + 26 * 26;
+
+/** Prefijo número `indice` (desde 0): A…Z, AA, AB… ZZ. */
+function prefijoDe(indice: number): string {
+  const letra = (n: number) => String.fromCharCode(65 + n);
+  if (indice < 26) return letra(indice);
+  const resto = indice - 26;
+  return letra(Math.floor(resto / 26)) + letra(resto % 26);
+}
+
+/**
+ * Código de referencia de una operación a partir de su número correlativo por usuario.
+ * Cada prefijo admite 999.999 operaciones: A-000001 … A-999999, B-000001 … Z-999999,
+ * AA-000001 … ZZ-999999.
+ */
 export function codigoOperacion(numero: number | null | undefined): string {
-  if (numero === null || numero === undefined) return "—";
-  return `OP-${String(numero).padStart(4, "0")}`;
+  if (numero === null || numero === undefined || numero < 1) return "—";
+  const posicion = numero - 1;
+  const indice = Math.floor(posicion / OPERACIONES_POR_PREFIJO);
+  if (indice >= TOTAL_PREFIJOS) return `#${numero}`;
+  const n = (posicion % OPERACIONES_POR_PREFIJO) + 1;
+  return `${prefijoDe(indice)}-${String(n).padStart(6, "0")}`;
 }
 
 /** Lo mínimo de una operación para razonar sobre grupos de planes. */

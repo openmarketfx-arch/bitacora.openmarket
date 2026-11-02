@@ -138,7 +138,8 @@ export function PanelPlanAlterno({ config }: { config: ConfigPlanAlterno }) {
       <div className="space-y-2 rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">
         <p>
           <span className="font-medium text-foreground">Cómo se enlazan.</span> Cada operación
-          tiene un código de referencia (OP-0001, OP-0002…). Al registrar una entrada con plan
+          tiene un código de referencia (A-000001, A-000002…; al llegar a A-999999 sigue B-000001
+          y así hasta Z, luego AA, AB… ZZ). Al registrar una entrada con plan
           puedes enlazarla con la anterior de tu plan de entradas.
         </p>
         <p>
